@@ -1,42 +1,18 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
-  function App() {
+function App() {
   return (
-    <div className="App">
-      <header>
-        <h1> Sahayog - Emergency Response System</h1>
-        <p>Real-time emergency coordination platform</p>
-      </header>
-      
-      <main>
-        <div className="status-card">
-          <h2>✅ System Status</h2>
-          <p><strong>Frontend:</strong> Running Successfully</p>
-          <p><strong>Backend API:</strong> http://localhost:5000</p>
-          <p><strong>Database:</strong> MongoDB (Sahayog)</p>
-        </div>
-
-        <div className="info-card">
-          <h3>📋 Project Structure </h3>
-          <ul>
-            <li>✓ Backend - Express.js Server</li>
-            <li>✓ Frontend - React Application</li>
-            <li>✓ Database - MongoDB</li>
-            <li>✓ Real-time - Socket.io (configured)</li>
-            <li>✓ Maps - Leaflet (installed)</li>
-          </ul>
-        </div>
-
-        <div className="team-card">
-          <h3>👥 Development Team</h3>
-          <p>Shweta Neupane • Akshyata Khanal • Nancy Rai</p>
-          <p><small>Patan Multiple Campus | 2026</small></p>
-        </div>
-      </main>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+      </Routes>
+    </Router>
   );
 }
 
 export default App;
-
-
-
