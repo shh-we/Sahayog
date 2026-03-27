@@ -60,7 +60,7 @@ exports.register = async (req, res) => {
       });
     }
     
-    // Create user
+    // Create new  user
     const user = await User.create({
       name,
       email: email.toLowerCase(),

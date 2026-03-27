@@ -89,19 +89,18 @@ const userSchema = new mongoose.Schema({
 });
 
 // encrypt psw
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function() {
   // Only encrypt if password is new or changed (not every time we update user)
-  if (!this.isModified('password')) {
-    return next();
-  }
-  
+  if (!this.isModified('password')) 
+    return ;
+    
   // Generate a salt (random data added to password before hashing)
   const salt = await bcrypt.genSalt(10);
   
   // Hash the password with the salt
   this.password = await bcrypt.hash(this.password, salt);
   
-  next(); // Continue with saving
+  
 });
 
 // check if entered psw matches stored
@@ -124,7 +123,7 @@ userSchema.methods.generateAuthToken = function() {
 userSchema.index({ location: '2dsphere' });
 
 
-userSchema.index({ email: 1 });
+
 
 // Export the model so other files can use it
 module.exports = mongoose.model('User', userSchema);
