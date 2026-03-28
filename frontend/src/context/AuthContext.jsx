@@ -51,7 +51,7 @@ const contextValue = useMemo(
 );
 
   return (
-    <AuthContext.Provider value={{contextValue }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
