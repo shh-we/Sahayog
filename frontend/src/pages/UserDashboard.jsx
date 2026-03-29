@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
 
-const Dashboard = () => {
+const UserDashboard = () => {
   const { user, logout } = useAuth();
   const [emergencies, setEmergencies] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -229,4 +229,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default UserDashboard;

@@ -47,17 +47,17 @@ function Register() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.box}>
-        <h2 style={styles.title}>🚨 Sahayog</h2>
-        <h3 style={styles.subtitle}>Create Account</h3>
+    <div className="flex justify-center items-center min-h-screen bg-[#f0f2f5]">
+      <div className="bg-white p-10 rounded-xl shadow-md w-[350px]">
+        <h2 className="text-center text-[#e74c3c] mb-1 text-2xl font-bold">🚨 Sahayog</h2>
+        <h3 className="text-center text-[#333] mb-5 text-lg font-semibold">Create Account</h3>
 
-        {error && <p style={styles.error}>{error}</p>}
-        {success && <p style={styles.success}>{success}</p>}
+        {error && <p className="text-red-500 text-center mb-3 text-sm">{error}</p>}
+        {success && <p className="text-green-600 text-center mb-3 text-sm">{success}</p>}
 
         <form onSubmit={handleSubmit}>
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="text"
             name="name"
             placeholder="Full Name"
@@ -66,7 +66,7 @@ function Register() {
             required
           />
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="email"
             name="email"
             placeholder="Email"
@@ -75,7 +75,7 @@ function Register() {
             required
           />
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="password"
             name="password"
             placeholder="Password (min 6 characters)"
@@ -84,7 +84,7 @@ function Register() {
             required
           />
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="text"
             name="phone"
             placeholder="Phone Number (10 digits)"
@@ -93,7 +93,7 @@ function Register() {
             required
           />
           <select
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             name="role"
             value={formData.role}
             onChange={handleChange}
@@ -102,12 +102,11 @@ function Register() {
             <option value="responder">Responder</option>
           </select>
 
-          {/* Only show skills if role is responder */}
           {formData.role === 'responder' && (
-            <div style={styles.skillsBox}>
-              <p style={styles.skillsTitle}>Select Your Skills:</p>
+            <div className="bg-[#f8f8f8] p-3 rounded-md mb-4">
+              <p className="font-bold mb-2 text-sm">Select Your Skills:</p>
               {['medical', 'fire', 'security', 'general'].map(skill => (
-                <label key={skill} style={styles.skillLabel}>
+                <label key={skill} className="block mb-1 text-sm cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.skills.includes(skill)}
@@ -120,7 +119,7 @@ function Register() {
           )}
 
           <button
-            style={loading ? {...styles.button, opacity: 0.7} : styles.button}
+            className={`w-full py-3 bg-[#e74c3c] text-white border-none rounded-md text-base cursor-pointer transition-opacity ${loading ? 'opacity-70' : 'opacity-100'}`}
             type="submit"
             disabled={loading}
           >
@@ -128,27 +127,12 @@ function Register() {
           </button>
         </form>
 
-        <p style={styles.link}>
+        <p className="text-center mt-4 text-sm">
           Already have an account? <Link to="/login">Login here</Link>
         </p>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: { display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', backgroundColor:'#f0f2f5' },
-  box: { backgroundColor:'white', padding:'40px', borderRadius:'10px', boxShadow:'0 2px 10px rgba(0,0,0,0.1)', width:'350px' },
-  title: { textAlign:'center', color:'#e74c3c', marginBottom:'5px' },
-  subtitle: { textAlign:'center', color:'#333', marginBottom:'20px' },
-  input: { width:'100%', padding:'12px', marginBottom:'15px', borderRadius:'6px', border:'1px solid #ddd', fontSize:'14px', boxSizing:'border-box' },
-  button: { width:'100%', padding:'12px', backgroundColor:'#e74c3c', color:'white', border:'none', borderRadius:'6px', fontSize:'16px', cursor:'pointer' },
-  error: { color:'red', textAlign:'center', marginBottom:'10px' },
-  success: { color:'green', textAlign:'center', marginBottom:'10px' },
-  link: { textAlign:'center', marginTop:'15px', fontSize:'14px' },
-  skillsBox: { backgroundColor:'#f8f8f8', padding:'10px', borderRadius:'6px', marginBottom:'15px' },
-  skillsTitle: { fontWeight:'bold', marginBottom:'8px', fontSize:'14px' },
-  skillLabel: { display:'block', marginBottom:'5px', fontSize:'14px', cursor:'pointer' }
-};
 
 export default Register;

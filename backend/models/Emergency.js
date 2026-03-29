@@ -20,7 +20,6 @@ const emergencySchema = new mongoose.Schema({
   // DESCRIPTION OF THE EMERGENCY
   description: {
     type: String,                                  
-    required: [true, 'Description is required'],
     trim: true,                                     
     maxlength: [500, 'Description cannot exceed 500 characters']
   },

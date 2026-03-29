@@ -37,14 +37,16 @@ function Login() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.box}>
-        <h2 style={styles.title}>🚨 Sahayog</h2>
-        <h3 style={styles.subtitle}>Login</h3>
-        {error && <p style={styles.error}>{error}</p>}
+    <div className="flex justify-center items-center h-screen bg-[#f0f2f5]">
+      <div className="bg-white p-10 rounded-xl shadow-md w-[350px]">
+        <h2 className="text-center text-[#e74c3c] mb-1 text-2xl font-bold">🚨 Sahayog</h2>
+        <h3 className="text-center text-[#333] mb-5 text-lg font-semibold">Login</h3>
+
+        {error && <p className="text-red-500 text-center mb-3 text-sm">{error}</p>}
+
         <form onSubmit={handleLogin}>
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="email"
             placeholder="Email"
             value={email}
@@ -52,7 +54,7 @@ function Login() {
             required
           />
           <input
-            style={styles.input}
+            className="w-full px-3 py-3 mb-4 rounded-md border border-[#ddd] text-sm box-border"
             type="password"
             placeholder="Password"
             value={password}
@@ -60,30 +62,20 @@ function Login() {
             required
           />
           <button
-            style={loading ? {...styles.button, opacity: 0.7} : styles.button}
+            className={`w-full py-3 bg-[#e74c3c] text-white border-none rounded-md text-base cursor-pointer transition-opacity ${loading ? 'opacity-70' : 'opacity-100'}`}
             type="submit"
             disabled={loading}
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-        <p style={styles.link}>
+
+        <p className="text-center mt-4 text-sm">
           Don't have an account? <Link to="/register">Register here</Link>
         </p>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: { display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', backgroundColor:'#f0f2f5' },
-  box: { backgroundColor:'white', padding:'40px', borderRadius:'10px', boxShadow:'0 2px 10px rgba(0,0,0,0.1)', width:'350px' },
-  title: { textAlign:'center', color:'#e74c3c', marginBottom:'5px' },
-  subtitle: { textAlign:'center', color:'#333', marginBottom:'20px' },
-  input: { width:'100%', padding:'12px', marginBottom:'15px', borderRadius:'6px', border:'1px solid #ddd', fontSize:'14px', boxSizing:'border-box' },
-  button: { width:'100%', padding:'12px', backgroundColor:'#e74c3c', color:'white', border:'none', borderRadius:'6px', fontSize:'16px', cursor:'pointer' },
-  error: { color:'red', textAlign:'center', marginBottom:'10px' },
-  link: { textAlign:'center', marginTop:'15px', fontSize:'14px' }
-};
 
 export default Login;
