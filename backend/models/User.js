@@ -1,54 +1,45 @@
-// Import required libraries
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
 
 const userSchema = new mongoose.Schema({
-     // USER'S FULL NAME
+     
   name: {
     type: String,                                   
-    required: [true, 'Name is required'],          
-    trim: true,                                    
-    minlength: [2, 'Name must be at least 2 characters'],
-    maxlength: [50, 'Name cannot exceed 50 characters']
+    required: true,       
+    trim: true                                   
   },
   
-  // USER'S EMAIL ADDRESS
+
   email: {
     type: String,                                    
-    required: [true, 'Email is required'],           
+    required: true,          
     unique: true,                                 
     lowercase: true,                                 
     trim: true,                                    
-    match: [                                        
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please enter a valid email address'
-    ]
+  
   },
   
-  // USER'S PASSWORD (will be encrypted before saving)
+  
   password: {
     type: String,                                    
-    required: [true, 'Password is required'],       
-    minlength: [6, 'Password must be at least 6 characters'],
-    select: false                                    // Never send password in API response
+    required: true,      
+    select: false      // Never send password in API response
   },
   
-  // USER'S PHONE NUMBER
+
   phone: {
     type: String,                                    
-    required: [true, 'Phone number is required'],    
-    match: [                                      
-      /^[0-9]{10}$/,
-      'Please enter a valid 10-digit phone number'
-    ]
+    required: true,
+    trim: true  
   },
   
-  // USER'S ROLE IN THE SYSTEM
+  
   role: {
     type: String,                                    
     enum: ['user', 'responder', 'admin'],            
-    default: 'user'                                  // If not specified, make them a regular user
+    default: 'user'                
   },
   
   skills: [{
@@ -61,49 +52,53 @@ const userSchema = new mongoose.Schema({
   ]
 }],
 
-  // FOR RESPONDERS: Are they currently available to respond to emergencies?
+  // for responders active status
   isAvailable: {
-    type: Boolean,                                   // Must be true or false
-    default: false                                   // Start as unavailable (off duty)
+    type: Boolean,         
+    default: false       //  (off duty)
   },
+
+  responseHistory: [{
+    emergencyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Emergency',
+    },
+    responseTime: Number,   // in seconds
+    feedback: Number,       // 1-5 rating
+  }],
   
-  // FOR RESPONDERS: Current location (to find nearest one)
+  // FOR RESPONDERS: Current location 
   location: {
     type: {
-      type: String,                                  // Must be 'Point' for MongoDB
+      type: String,             
       enum: ['Point']
+    
     },
     coordinates: {
-      type: [Number],                                // Array of two numbers [longitude, latitude]
-      default: undefined                             // Optional field
+      type: [Number],             //  [longitude, latitude]
+      default: undefined             
     }
   },
   
-  // TIMESTAMP: When was this user account created?
-  createdAt: {
-    type: Date,                                      // Must be a date
-    default: Date.now                                // Automatically set to current time
-  }
 }, {
-  timestamps: true                                   // Automatically add createdAt and updatedAt fields
+  timestamps: true     // Automatically add createdAt and updatedAt fields
 });
 
 // encrypt psw
 userSchema.pre('save', async function() {
-  // Only encrypt if password is new or changed (not every time we update user)
+  // Only encrypt if psw is new or
   if (!this.isModified('password')) 
     return ;
-    
-  // Generate a salt (random data added to password before hashing)
+  // random data added to psw before hashing
   const salt = await bcrypt.genSalt(10);
   
-  // Hash the password with the salt
+  // Hash psw
   this.password = await bcrypt.hash(this.password, salt);
-  
-  
+ 
 });
 
 // check if entered psw matches stored
+
 userSchema.methods.comparePassword = async function(enteredPassword) {
   // bcrypt compares the plain text password with encrypted one
   return await bcrypt.compare(enteredPassword, this.password);
@@ -120,10 +115,10 @@ userSchema.methods.generateAuthToken = function() {
 };
 
 
-userSchema.index({ location: '2dsphere' });
+userSchema.index({ location: '2dsphere' }, { sparse: true });
 
 
 
 
 // Export the model so other files can use it
-module.exports = mongoose.model('User', userSchema);
+export default mongoose.model("User",userSchema);

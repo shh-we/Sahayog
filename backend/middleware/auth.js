@@ -1,25 +1,22 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
 /**
  * @desc    Protect routes - verify JWT token
  * @usage   router.get('/profile', protect, getProfile)
  */
-exports.protect = async (req, res, next) => {
+export async function protect (req, res, next){
   try {
-    let token;
-    
-    // Extract token from Authorization header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-    
-    if (!token) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
-        success: false,
-        message: 'Access denied. Please login to continue.'
+        message: "Access denied. No token provided."
       });
     }
+     //  Extract token from "Bearer <token>"
+    const token = authHeader.split(" ")[1];
+
     
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -51,7 +48,7 @@ exports.protect = async (req, res, next) => {
  * @desc    Authorize specific roles
  * @usage   router.put('/availability', protect, authorize('responder'), toggleAvailability)
  */
-exports.authorize = (...roles) => {
+export function authorize(...roles){
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({

@@ -1,15 +1,15 @@
-const User = require('../models/User');
+import User from"../models/User.js";
 
 /**
  * @desc    Register new user
  * @route   POST /api/auth/register
  * @access  Public
  */
-exports.register = async (req, res) => {
+//register new user
+export async function register (req, res){
   try {
     const { name, email, password, phone, role } = req.body;
     
-    // Validate required fields
     if (!name || !email || !password || !phone) {
       return res.status(400).json({
         success: false,
@@ -17,20 +17,20 @@ exports.register = async (req, res) => {
       });
     }
     
-    // Validate email format
+    
     const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid email address'
+        message: "Please provide a valid email address"
       });
     }
     
-    // Validate password length
+    
     if (password.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters long'
+        message: "Password must be at least 6 characters long"
       });
     }
     
@@ -39,7 +39,7 @@ exports.register = async (req, res) => {
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid 10-digit phone number'
+        message: "Please provide a valid 10-digit phone number"
       });
     }
     
@@ -47,7 +47,7 @@ exports.register = async (req, res) => {
     if (role && !['user', 'responder', 'admin'].includes(role)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid role. Must be: user, responder, or admin'
+        message: "Invalid role. Must be: user, responder, or admin"
       });
     }
     
@@ -101,11 +101,13 @@ exports.register = async (req, res) => {
  * @route   POST /api/auth/login
  * @access  Public
  */
-exports.login = async (req, res) => {
+
+//login
+export async function login (req, res) {
   try {
     const { email, password, loginAs } = req.body;
     
-    // Validate input
+  
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -172,7 +174,9 @@ exports.login = async (req, res) => {
  * @route   GET /api/auth/me
  * @access  Private
  */
-exports.getMe = async (req, res) => {
+
+//get current logged in user
+export async function getMe(req, res) {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user.id).select('-password');
@@ -206,4 +210,4 @@ exports.getMe = async (req, res) => {
       error: error.message
     });
   }
-};
+}
