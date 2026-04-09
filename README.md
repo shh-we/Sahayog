@@ -1,18 +1,14 @@
-# 🚨 Sahayog - Emergency Response System
+#  Sahayog - Emergency Response System
 
 Real-time emergency coordination platform built with MERN stack.
 
-## 👥 Team Members
+##  Team Members
 
-- **Shweta Neupane** (79010116)
-- **Akshyata Khanal** (79010008)
-- **Nancy Rai** (79010059)
+- **Shweta Neupane** 
+- **Akshyata Khanal** 
+- **Nancy Rai** (
 
-**Institution:** Patan Multiple Campus  
-**Program:** Bachelor's in Computer Science and Information Technology  
-**Year:** 2026
 
----
 
 ## 📋 Project Overview
 
