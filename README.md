@@ -9,7 +9,6 @@ Real-time emergency coordination platform built with MERN stack.
 - **Nancy Rai** 
 
 
----
 
 ## 📋 Project Overview
 
@@ -167,3 +166,4 @@ frontend/
 ├── package.json
 ├── vite.config.js
 └── README.md
+
