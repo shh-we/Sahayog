@@ -1,4 +1,7 @@
 import Emergency from "../models/Emergency.js";
+import { getRequiredSkills, findNearbyResponders } from "../services/emergencyService.js";
+import { notifyNearbyResponders } from "../socket/emergencySocket.js";
+import { getIO } from "../socket/index.js";
 
 // @desc    Create new emergency
 // @route   POST /api/emergencies
@@ -6,15 +9,17 @@ import Emergency from "../models/Emergency.js";
 
 export async function createEmergency(req, res) {
   try {
-    const { type, description, longitude, latitude, address } = req.body;
+    const { type, description, longitude, latitude, address, radius = 10000 } = req.body;
 
     // 1. Validate required fields
-    if (!type || !longitude || !latitude) {
+    if (!type || longitude === undefined || latitude === undefined) {
       return res.status(400).json({
         success: false,
         message: "Please provide type, longitude and latitude"
       });
     }
+
+    const requiredSkills = getRequiredSkills(type);
 
     // 2. Create emergency
     const emergency = await Emergency.create({
@@ -23,15 +28,52 @@ export async function createEmergency(req, res) {
       description,
       location: {
         type: "Point",
-        coordinates: [longitude, latitude],
+        coordinates: [Number(longitude), Number(latitude)],
         address
-      }
+      },
+      radius: Number(radius),
+      requiredSkills
+    });
+
+    if (!emergency) {
+      throw new Error("Failed to create emergency")
+    }
+
+    const responders = await findNearbyResponders(
+      emergency.location,
+      requiredSkills,
+      Number(radius)
+    );
+
+    emergency.responders = responders.map((responder) => ({
+      userId: responder._id,
+      status: "notified",
+      notifiedAt: new Date()
+    }));
+
+    await emergency.save();
+
+    if (responders.length > 0) {
+      notifyNearbyResponders(responders, emergency);
+    }
+
+    // Broadcast new emergency to all admins
+    const io = getIO();
+    io.emit("new_emergency", {
+      _id: emergency._id,
+      type: emergency.type,
+      description: emergency.description,
+      location: emergency.location,
+      createdBy: emergency.createdBy,
+      createdAt: emergency.createdAt,
+      status: emergency.status
     });
 
     res.status(201).json({
       success: true,
       message: "Emergency reported successfully",
-      emergency
+      emergency,
+      respondersNotified: responders.length
     });
 
   } catch (error) {

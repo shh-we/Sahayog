@@ -1,5 +1,6 @@
 import Emergency from "../models/Emergency.js";
 import User from "../models/User.js";
+import { getIO } from "../socket/index.js";
 
 // @desc    Accept an emergency
 // @route   POST /api/responders/emergencies/:id/accept
@@ -53,6 +54,15 @@ export async function acceptEmergency(req, res) {
           emergencyId: emergency._id
         }
       }
+    });
+
+    // Emit Socket.IO event to notify all users
+    const io = getIO();
+    io.emit("emergency_accepted", {
+      emergencyId: emergency._id,
+      responderId: req.user.id,
+      responderName: req.user.name,
+      status: "assigned"
     });
 
     res.status(200).json({
@@ -116,6 +126,16 @@ export async function updateResponseStatus(req, res) {
     if (status === "completed") emergency.resolvedAt = new Date();
 
     await emergency.save();
+
+    // Emit Socket.IO event to notify users and admin
+    const io = getIO();
+    io.emit("status_update", {
+      emergencyId: emergency._id,
+      responderId: req.user.id,
+      responderName: req.user.name,
+      status: status,
+      emergencyStatus: emergency.status
+    });
 
     res.status(200).json({
       success: true,
@@ -235,6 +255,50 @@ export async function submitFeedback(req, res) {
     res.status(500).json({
       success: false,
       message: "Error submitting feedback",
+      error: error.message
+    });
+  }
+}
+
+// @desc    Get nearby responders
+// @route   GET /api/responders/nearby
+// @access  Private
+export async function getNearbyResponders(req, res) {
+  try {
+    const { longitude, latitude, radius = 15000 } = req.query;
+
+    if (!longitude || !latitude) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide longitude and latitude"
+      });
+    }
+
+    const responders = await User.find({
+      role: "responder",
+      isAvailable: true,
+      location: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [Number(longitude), Number(latitude)]
+          },
+          $maxDistance: Number(radius)
+        }
+      }
+    }).select("name email phone skills isAvailable location createdAt");
+
+    res.status(200).json({
+      success: true,
+      count: responders.length,
+      responders
+    });
+
+  } catch (error) {
+    console.error("Error in getNearbyResponders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching nearby responders",
       error: error.message
     });
   }

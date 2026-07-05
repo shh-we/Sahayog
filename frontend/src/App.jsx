@@ -1,7 +1,71 @@
-import {Route, Routes} from "react-router";
+import { useEffect } from "react"
+import { Routes, Route } from "react-router-dom"
+import { Toaster } from "react-hot-toast"
+import useAuthStore from "./stores/authStore.js"
+import ProtectedRoute from "./components/ProtectedRoute.jsx"
+import LandingLayout from "./components/ui/layout/LandingLayout.jsx"
+import DashboardLayout from "./components/ui/layout/DashboardLayout.jsx"
+import LandingPage from "./pages/LandingPage.jsx"
+import Login from "./pages/auth/Login.jsx"
+import Register from "./pages/auth/Register.jsx"
+import UserDashboard from "./pages/user/UserDashboard.jsx"
+import ResponderDashboard from "./pages/responder/ResponderDashboard.jsx"
+import AdminDashboard from "./pages/admin/AdminDashboard.jsx"
 
-const App = () =>{
-  
-};
-export default App;
+import {
+  HOME_ROUTE,
+  LOGIN_ROUTE,
+  REGISTER_ROUTE,
+  USER_DASHBOARD,
+  RESPONDER_DASHBOARD,
+  ADMIN_DASHBOARD
+} from "./constants/routes.js"
 
+function App() {
+  const checkAuth = useAuthStore((state) => state.checkAuth)
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
+
+  return (
+    <>
+      <Toaster position="top-center" />
+      <Routes>
+        {/* Landing Routes - With Navbar */}
+        <Route element={<LandingLayout />}>
+          <Route path={HOME_ROUTE} element={<LandingPage />} />
+        </Route>
+
+        {/* Auth Routes - Without Navbar */}
+        <Route path={LOGIN_ROUTE} element={<Login />} />
+        <Route path={REGISTER_ROUTE} element={<Register />} />
+
+        {/* Dashboard Routes - With Sidebar, Protected */}
+        <Route element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route path={USER_DASHBOARD} element={
+            <ProtectedRoute roles={["user"]}>
+              <UserDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path={RESPONDER_DASHBOARD} element={
+            <ProtectedRoute roles={["responder"]}>
+              <ResponderDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path={ADMIN_DASHBOARD} element={
+            <ProtectedRoute roles={["admin"]}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+        </Route>
+      </Routes>
+    </>
+  )
+}
+
+export default App

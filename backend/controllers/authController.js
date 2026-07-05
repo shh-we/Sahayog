@@ -8,7 +8,7 @@ import User from"../models/User.js";
 //register new user
 export async function register (req, res){
   try {
-    const { name, email, password, phone, role } = req.body;
+    const { name, email, password, phone, role, skills = [] } = req.body;
     
     if (!name || !email || !password || !phone) {
       return res.status(400).json({
@@ -18,7 +18,7 @@ export async function register (req, res){
     }
     
     
-    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
         success: false,
@@ -35,7 +35,7 @@ export async function register (req, res){
     }
     
     // Validate phone number (10 digits)
-    const phoneRegex = /^[0-9]{10}$/;
+    const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({
         success: false,
@@ -50,6 +50,25 @@ export async function register (req, res){
         message: "Invalid role. Must be: user, responder, or admin"
       });
     }
+
+    // Validate skills for responders
+    const validSkills = new Set(['medical', 'fire', 'security', 'general']);
+    if (role === 'responder') {
+      if (!Array.isArray(skills) || skills.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Responder accounts must include at least one skill'
+        });
+      }
+
+      const invalidSkills = skills.filter((skill) => !validSkills.has(skill));
+      if (invalidSkills.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid skills: ${invalidSkills.join(', ')}`
+        });
+      }
+    }
     
     // Check if email already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -60,14 +79,20 @@ export async function register (req, res){
       });
     }
     
-    // Create new  user
-    const user = await User.create({
+    // Create new user
+    const userData = {
       name,
       email: email.toLowerCase(),
       password,
       phone,
       role: role || 'user'
-    });
+    };
+
+    if (role === 'responder') {
+      userData.skills = skills;
+    }
+
+    const user = await User.create(userData);
     
     // Generate token
     const token = user.generateAuthToken();
@@ -139,6 +164,12 @@ export async function login (req, res) {
         success: false,
         message: `Your account is registered as ${user.role}, not ${loginAs}. Please select the correct login option.`
       });
+    }
+
+    // Mark responders available when they log in
+    if (user.role === 'responder' && !user.isAvailable) {
+      user.isAvailable = true;
+      await user.save();
     }
     
     // Generate token

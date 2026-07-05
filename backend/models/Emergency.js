@@ -32,16 +32,16 @@ const emergencySchema = new mongoose.Schema({
       trim: true,
     },
   },
-  aiClassification: {
-    category: String,
-    severity: {
-      type: Number,
-      min: 1,
-      max: 5,
-    },
-    requiredSkills: [String],
-    confidence: Number,
+  radius: {
+    type: Number,
+    default: 10000,
   },
+  requiredSkills: [{
+    type: String,
+    enum: ['medical', 'fire', 'security', 'general'],
+    default: undefined
+  }],
+  
   status: {
     type: String,
     enum: ['active', 'assigned', 'in_progress', 'resolved', 'cancelled'],

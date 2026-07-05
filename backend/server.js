@@ -5,13 +5,13 @@ import authRoutes from "./routes/authRoutes.js"
 import userRoutes from "./routes/userRoutes.js";
 import emergencyRoutes from "./routes/emergencyRoutes.js";
 import responderRoutes from "./routes/responderRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import {connectDB} from'./config/db.js';
+import { initializeSocket } from "./socket/index.js";
 
 // Load environment variables
 dotenv.config();
 
-// Connect to database
-connectDB();
 
 // Create Express app
 const app = express();
@@ -30,6 +30,7 @@ app.use(express.urlencoded({
   app.use("/api/users", userRoutes);
   app.use("/api/emergencies", emergencyRoutes);
   app.use("/api/responders", responderRoutes);
+  app.use("/api/admin", adminRoutes);
 
 
 
@@ -37,7 +38,10 @@ app.use(express.urlencoded({
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+
+await connectDB();
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-  console.log(`Visit: http://localhost:${PORT}`);
 });
+
+initializeSocket(server);
