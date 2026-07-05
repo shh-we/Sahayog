@@ -1,6 +1,7 @@
+import { useEffect } from "react"
 import { Routes, Route } from "react-router-dom"
 import { Toaster } from "react-hot-toast"
-import { AuthProvider } from "./context/AuthContext.jsx"
+import useAuthStore from "./stores/authStore.js"
 import ProtectedRoute from "./components/ProtectedRoute.jsx"
 import LandingLayout from "./components/ui/layout/LandingLayout.jsx"
 import DashboardLayout from "./components/ui/layout/DashboardLayout.jsx"
@@ -11,17 +12,34 @@ import UserDashboard from "./pages/user/UserDashboard.jsx"
 import ResponderDashboard from "./pages/responder/ResponderDashboard.jsx"
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx"
 
+import {
+  HOME_ROUTE,
+  LOGIN_ROUTE,
+  REGISTER_ROUTE,
+  USER_DASHBOARD,
+  RESPONDER_DASHBOARD,
+  ADMIN_DASHBOARD
+} from "./constants/routes.js"
+
 function App() {
+  const checkAuth = useAuthStore((state) => state.checkAuth)
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
+
   return (
-    <AuthProvider>
+    <>
       <Toaster position="top-center" />
       <Routes>
         {/* Landing Routes - With Navbar */}
         <Route element={<LandingLayout />}>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path={HOME_ROUTE} element={<LandingPage />} />
         </Route>
+
+        {/* Auth Routes - Without Navbar */}
+        <Route path={LOGIN_ROUTE} element={<Login />} />
+        <Route path={REGISTER_ROUTE} element={<Register />} />
 
         {/* Dashboard Routes - With Sidebar, Protected */}
         <Route element={
@@ -29,24 +47,24 @@ function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route path="/user-dashboard" element={
+          <Route path={USER_DASHBOARD} element={
             <ProtectedRoute roles={["user"]}>
               <UserDashboard />
             </ProtectedRoute>
           } />
-          <Route path="/responder-dashboard" element={
+          <Route path={RESPONDER_DASHBOARD} element={
             <ProtectedRoute roles={["responder"]}>
               <ResponderDashboard />
             </ProtectedRoute>
           } />
-          <Route path="/admin-dashboard" element={
+          <Route path={ADMIN_DASHBOARD} element={
             <ProtectedRoute roles={["admin"]}>
               <AdminDashboard />
             </ProtectedRoute>
           } />
         </Route>
       </Routes>
-    </AuthProvider>
+    </>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useAuth } from "../../context/AuthContext.jsx"
+import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
@@ -10,7 +10,7 @@ import { getNearbyResponders } from "../../api/responder.js"
 import toast from "react-hot-toast"
 
 export default function UserDashboard() {
-  const { user } = useAuth()
+  const user = useAuthStore((state) => state.user)
   const [emergencies, setEmergencies] = useState([])
   const [responders, setResponders] = useState([])
   const [loading, setLoading] = useState(true)

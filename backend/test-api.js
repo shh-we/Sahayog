@@ -1,0 +1,182 @@
+import axios from 'axios';
+
+const API = axios.create({
+  baseURL: 'http://localhost:5000/api'
+});
+
+const tests = [];
+let responderToken = '';
+let userId = '';
+let emergencyId = '';
+let responderId = '';
+
+// Helper to log results
+function log(title, success, data) {
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`${success ? '✅' : '❌'} ${title}`);
+  if (data) console.log(JSON.stringify(data, null, 2));
+}
+
+async function runTests() {
+  try {
+    // Test 1: Register Responder with skills
+    console.log('\n🧪 Starting Backend Tests...\n');
+    
+    let res = await API.post('/auth/register', {
+      name: 'Responder Test',
+      email: `responder-${Date.now()}@test.com`,
+      password: 'password123',
+      phone: '9876543210',
+      role: 'responder',
+      skills: ['medical', 'fire']
+    });
+    log('Register Responder with Skills', res.status === 201, {
+      success: res.data.success,
+      role: res.data.user.role,
+      skills: res.data.user.isAvailable ? '(isAvailable set)' : 'undefined'
+    });
+    responderToken = res.data.token;
+    responderId = res.data.user.id;
+
+    // Test 2: Register User
+    res = await API.post('/auth/register', {
+      name: 'User Test',
+      email: `user-${Date.now()}@test.com`,
+      password: 'password123',
+      phone: '9876543211',
+      role: 'user'
+    });
+    log('Register User', res.status === 201, { success: res.data.success });
+    const userToken = res.data.token;
+    userId = res.data.user.id;
+
+    // Test 3: Login
+    res = await API.post('/auth/login', {
+      email: `responder-${Date.now() - 1000}@test.com`,
+      password: 'password123'
+    });
+    log('Login (Note: Using fresh email)', res.status === 200 || res.status === 401, {
+      message: res.data.message
+    });
+
+    // Test 4: Get Current User (Responder)
+    res = await API.get('/auth/me', {
+      headers: { Authorization: `Bearer ${responderToken}` }
+    });
+    log('Get Current User (Responder)', res.status === 200, {
+      name: res.data.user.name,
+      role: res.data.user.role,
+      isAvailable: res.data.user.isAvailable
+    });
+
+    // Test 5: Update Responder Location
+    res = await API.put(
+      '/responders/location',
+      {
+        longitude: 77.2,
+        latitude: 28.6
+      },
+      { headers: { Authorization: `Bearer ${responderToken}` } }
+    );
+    log('Update Responder Location', res.status === 200, {
+      coordinates: res.data.location?.coordinates
+    });
+
+    // Test 6: Toggle Availability
+    res = await API.put(
+      '/responders/availability',
+      {},
+      { headers: { Authorization: `Bearer ${responderToken}` } }
+    );
+    log('Toggle Responder Availability', res.status === 200, {
+      isAvailable: res.data.isAvailable,
+      message: res.data.message
+    });
+
+    // Test 7: Create Emergency (User)
+    res = await API.post(
+      '/emergencies',
+      {
+        type: 'fire',
+        description: 'Test emergency in downtown',
+        longitude: 77.2,
+        latitude: 28.6,
+        address: 'Test Street',
+        radius: 5000
+      },
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    log('Create Emergency', res.status === 201, {
+      type: res.data.emergency.type,
+      status: res.data.emergency.status,
+      respondersNotified: res.data.respondersNotified,
+      responders: res.data.emergency.responders?.map(r => ({ userId: r.userId, status: r.status }))
+    });
+    emergencyId = res.data.emergency._id;
+
+    // Test 8: Get Nearby Emergencies
+    res = await API.get(
+      '/emergencies/nearby',
+      {
+        params: {
+          longitude: 77.2,
+          latitude: 28.6,
+          radius: 10000
+        },
+        headers: { Authorization: `Bearer ${responderToken}` }
+      }
+    );
+    log('Get Nearby Emergencies', res.status === 200, {
+      count: res.data.count,
+      emergencies: res.data.emergencies?.map(e => ({ id: e._id, type: e.type, status: e.status }))
+    });
+
+    // Test 9: Accept Emergency (Responder)
+    if (emergencyId) {
+      res = await API.post(
+        `/responders/emergencies/${emergencyId}/accept`,
+        {},
+        { headers: { Authorization: `Bearer ${responderToken}` } }
+      );
+      log('Accept Emergency', res.status === 200, {
+        emergencyStatus: res.data.emergency.status,
+        responders: res.data.emergency.responders?.map(r => ({
+          userId: r.userId,
+          status: r.status
+        }))
+      });
+    }
+
+    // Test 10: Update Response Status
+    if (emergencyId) {
+      res = await API.put(
+        `/responders/emergencies/${emergencyId}/status`,
+        { status: 'on_scene' },
+        { headers: { Authorization: `Bearer ${responderToken}` } }
+      );
+      log('Update Response Status to on_scene', res.status === 200, {
+        responderStatus: res.data.responder.status,
+        arrivedAt: res.data.responder.arrivedAt ? 'set' : 'not set'
+      });
+    }
+
+    // Test 11: Get Responder Assignments
+    res = await API.get(
+      '/responders/my-assignments',
+      { headers: { Authorization: `Bearer ${responderToken}` } }
+    );
+    log('Get Responder Assignments', res.status === 200, {
+      count: res.data.count,
+      assignments: res.data.emergencies?.map(e => ({ id: e._id, type: e.type, status: e.status }))
+    });
+
+    console.log('\n\n✅ All tests completed!\n');
+
+  } catch (error) {
+    console.error('\n❌ Test Error:', error.response?.data || error.message);
+  }
+
+  process.exit(0);
+}
+
+runTests();

@@ -1,18 +1,25 @@
 import { Navigate, useNavigate } from "react-router-dom"
-import { useAuth } from "../context/AuthContext.jsx"
+import useAuthStore from "../stores/authStore.js"
+import {
+  REGISTER_ROUTE,
+  LOGIN_ROUTE,
+  ADMIN_DASHBOARD,
+  RESPONDER_DASHBOARD,
+  USER_DASHBOARD
+} from "../constants/routes.js"
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const user = useAuthStore((state) => state.user)
 
   // If already logged in, redirect to appropriate dashboard
   if (user) {
     if (user.role === "admin") {
-      return <Navigate to="/admin-dashboard" replace />
+      return <Navigate to={ADMIN_DASHBOARD} replace />
     } else if (user.role === "responder") {
-      return <Navigate to="/responder-dashboard" replace />
+      return <Navigate to={RESPONDER_DASHBOARD} replace />
     } else {
-      return <Navigate to="/user-dashboard" replace />
+      return <Navigate to={USER_DASHBOARD} replace />
     }
   }
 
@@ -21,9 +28,9 @@ export default function LandingPage() {
       <h1>Sahayog</h1>
       <p>Emergency Response Platform</p>
       <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-        <button type="button" onClick={() => navigate("/register")}>Register</button>
-        <button type="button" onClick={() => navigate("/login")}>Login</button>
+        <button type="button" onClick={() => navigate(REGISTER_ROUTE)}>Register</button>
+        <button type="button" onClick={() => navigate(LOGIN_ROUTE)}>Login</button>
       </div>
     </div>
   )
-}
+}

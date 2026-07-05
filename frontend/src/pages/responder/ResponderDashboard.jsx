@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useAuth } from "../../context/AuthContext.jsx"
+import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import EmergencyForm from "../../components/emergency/EmergencyForm.jsx"
@@ -10,7 +10,7 @@ import { toggleAvailability, updateLocation, getMyAssignments, acceptEmergency }
 import toast from "react-hot-toast"
 
 export default function ResponderDashboard() {
-  const { user } = useAuth()
+  const user = useAuthStore((state) => state.user)
   const [isAvailable, setIsAvailable] = useState(user?.isAvailable || false)
   const [responderLocation, setResponderLocation] = useState([27.7172, 85.3240]) // Kathmandu
   const [nearbyEmergencies, setNearbyEmergencies] = useState([])

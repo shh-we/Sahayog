@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import { getIO } from "../socket/index.js";
 
 // @desc    Get logged in user profile
 // @route   GET /api/users/profile
@@ -176,7 +177,7 @@ export async function changePassword(req, res) {
 }
 
 // @desc    Update responder location
-// @route   PUT /api/users/location
+// @route   PUT /api/responders/location
 // @access  Private - Responder only
 export async function updateLocation(req, res) {
   try {
@@ -200,6 +201,15 @@ export async function updateLocation(req, res) {
       { new: true }
     ).select("-password");
 
+    // Emit Socket.IO event for location update
+    const io = getIO();
+    io.emit("location_update", {
+      responderId: req.user.id,
+      responderName: user.name,
+      latitude: latitude,
+      longitude: longitude
+    });
+
     res.status(200).json({
       success: true,
       message: "Location updated successfully",
@@ -217,7 +227,7 @@ export async function updateLocation(req, res) {
 }
 
 // @desc    Toggle responder availability
-// @route   PUT /api/users/availability
+// @route   PUT /api/responders/availability
 // @access  Private - Responder only
 export async function toggleAvailability(req, res) {
   try {
@@ -233,6 +243,15 @@ export async function toggleAvailability(req, res) {
     // Flip current availability
     user.isAvailable = !user.isAvailable;
     await user.save();
+
+    // Emit Socket.IO event for availability change
+    const io = getIO();
+    const eventName = user.isAvailable ? "responder_online" : "responder_offline";
+    io.emit(eventName, {
+      responderId: req.user.id,
+      responderName: user.name,
+      isAvailable: user.isAvailable
+    });
 
     res.status(200).json({
       success: true,

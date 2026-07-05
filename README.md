@@ -1,16 +1,13 @@
-# 🚨 Sahayog - Emergency Response System
+#  Sahayog - Emergency Response System
 
 Real-time emergency coordination platform built with MERN stack.
 
-## 👥 Team Members
+##  Team Members
 
-- **Shweta Neupane** (79010116)
-- **Akshyata Khanal** (79010008)
-- **Nancy Rai** (79010059)
+- **Shweta Neupane** 
+- **Akshyata Khanal** 
+- **Nancy Rai** 
 
-**Institution:** Patan Multiple Campus  
-**Program:** Bachelor's in Computer Science and Information Technology  
-**Year:** 2026
 
 ---
 
@@ -70,3 +67,103 @@ Sahayog/
 ├── .gitignore
 └── README.md
 ```
+
+frontend/
+├── public/
+│   └── vite.svg
+├── src/
+│   ├── api/
+│   │   ├── axios.js           # Axios instance with interceptors
+│   │   ├── auth.js            # Auth API calls
+│   │   ├── emergency.js       # Emergency API calls
+│   │   ├── responder.js       # Responder API calls
+│   │   └── user.js            # User API calls
+│   │
+│   ├── components/
+│   │   ├── auth/
+│   │   │   ├── LoginForm.jsx
+│   │   │   ├── RegisterForm.jsx
+│   │   │   └── ProtectedRoute.jsx
+│   │   │
+│   │   ├── emergency/
+│   │   │   ├── EmergencyForm.jsx
+│   │   │   ├── EmergencyList.jsx
+│   │   │   ├── EmergencyCard.jsx
+│   │   │   └── EmergencyDetails.jsx
+│   │   │
+│   │   ├── responder/
+│   │   │   ├── NearbyEmergencies.jsx
+│   │   │   ├── MyAssignments.jsx
+│   │   │   ├── ResponseActions.jsx
+│   │   │   └── AvailabilityToggle.jsx
+│   │   │
+│   │   ├── map/
+│   │   │   ├── MapView.jsx
+│   │   │   ├── EmergencyMarker.jsx
+│   │   │   ├── LocationPicker.jsx
+│   │   │   └── RouteDisplay.jsx  # For A* route later
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── UserList.jsx
+│   │   │   ├── EmergencyManagement.jsx
+│   │   │   └── UserDetails.jsx
+│   │   │
+│   │   ├── common/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── ErrorBoundary.jsx
+│   │   │   ├── LoadingSpinner.jsx
+│   │   │   └── ErrorMessage.jsx
+│   │   │
+│   │   └── layout/
+│   │       ├── MainLayout.jsx
+│   │       ├── DashboardLayout.jsx
+│   │       └── AuthLayout.jsx
+│   │
+│   ├── context/
+│   │   ├── AuthContext.jsx      # User auth state
+│   │   ├── SocketContext.jsx    # Socket.io connection
+│   │   └── LocationContext.jsx  # Geolocation handling
+│   │
+│   ├── hooks/
+│   │   ├── useAuth.js           # Custom auth hook
+│   │   ├── useSocket.js         # Socket.io hook
+│   │   ├── useGeolocation.js    # Browser geolocation
+│   │   └── useEmergencies.js    # Fetch emergencies logic
+│   │
+│   ├── pages/
+│   │   ├── auth/
+│   │   │   ├── Login.jsx
+│   │   │   └── Register.jsx
+│   │   │
+│   │   ├── user/
+│   │   │   ├── UserDashboard.jsx
+│   │   │   ├── CreateEmergency.jsx
+│   │   │   ├── MyEmergencies.jsx
+│   │   │   └── Profile.jsx
+│   │   │
+│   │   ├── responder/
+│   │   │   ├── ResponderDashboard.jsx
+│   │   │   ├── NearbyPage.jsx
+│   │   │   └── AssignmentsPage.jsx
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── AdminDashboard.jsx
+│   │   │   ├── UsersPage.jsx
+│   │   │   └── EmergenciesPage.jsx
+│   │   │
+│   │   └── NotFound.jsx
+│   │
+│   ├── utils/
+│   │   ├── constants.js         # Emergency types, status enum
+│   │   ├── helpers.js           # Date formatting, distance calc
+│   │   └── validators.js        # Form validation
+│   │
+│   ├── App.jsx
+│   ├── main.jsx
+│   └── index.css                # Minimal reset only
+│
+├── .env
+├── .gitignore
+├── package.json
+├── vite.config.js
+└── README.md

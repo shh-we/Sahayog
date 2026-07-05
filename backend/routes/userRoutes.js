@@ -2,8 +2,6 @@ import express from "express";
 import {
   getProfile,
   updateProfile,
-  updateLocation,
-  toggleAvailability,
   changePassword,
   getAllUsers,
   getUserById,
@@ -19,10 +17,6 @@ const router = express.Router();
 router.get("/profile", protect, getProfile);
 router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
-
-// Responder only
-router.put("/location", protect, authorize("responder"), updateLocation);
-router.put("/availability", protect, authorize("responder"), toggleAvailability);
 
 // Admin only
 router.get("/", protect, authorize("admin"), getAllUsers);

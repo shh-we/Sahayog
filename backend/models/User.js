@@ -86,7 +86,7 @@ const userSchema = new mongoose.Schema({
 
 // encrypt psw
 userSchema.pre('save', async function() {
-  // Only encrypt if psw is new or
+  // Only encrypt if psw is new 
   if (!this.isModified('password')) 
     return ;
   // random data added to psw before hashing
@@ -100,7 +100,7 @@ userSchema.pre('save', async function() {
 // check if entered psw matches stored
 
 userSchema.methods.comparePassword = async function(enteredPassword) {
-  // bcrypt compares the plain text password with encrypted one
+  // bcrypt : compares the plain text password with encrypted one
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
@@ -120,5 +120,4 @@ userSchema.index({ location: '2dsphere' }, { sparse: true });
 
 
 
-// Export the model so other files can use it
 export default mongoose.model("User",userSchema);

@@ -1,9 +1,11 @@
-import { useAuth } from "../../../context/AuthContext.jsx"
+import useAuthStore from "../../../stores/authStore.js"
 import { useNavigate } from "react-router-dom"
+import { HOME_ROUTE, LOGIN_ROUTE, REGISTER_ROUTE } from "../../../constants/routes.js"
 import logo from "../../../assets/logo.svg"
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const user = useAuthStore((state) => state.user)
+  const logoutUser = useAuthStore((state) => state.logoutUser)
   const navigate = useNavigate()
 
   return (
@@ -16,7 +18,7 @@ export default function Navbar() {
     }}>
       <button 
         type="button" 
-        onClick={() => navigate("/")} 
+        onClick={() => navigate(HOME_ROUTE)} 
         style={{ 
           cursor: "pointer", 
           background: "none", 
@@ -35,8 +37,8 @@ export default function Navbar() {
             <button 
               type="button" 
               onClick={() => {
-                logout()
-                navigate("/")
+                logoutUser()
+                navigate(HOME_ROUTE)
               }}
             >
               Logout
@@ -44,10 +46,10 @@ export default function Navbar() {
           </>
         ) : (
           <>
-            <button type="button" onClick={() => navigate("/login")}>
+            <button type="button" onClick={() => navigate(LOGIN_ROUTE)}>
               Login
             </button>
-            <button type="button" onClick={() => navigate("/register")}>
+            <button type="button" onClick={() => navigate(REGISTER_ROUTE)}>
               Register
             </button>
           </>

@@ -1,8 +1,10 @@
-import { useAuth } from "../../../context/AuthContext.jsx"
+import useAuthStore from "../../../stores/authStore.js"
 import { useNavigate } from "react-router-dom"
+import { HOME_ROUTE } from "../../../constants/routes.js"
 
 export default function Sidebar() {
-  const { user, logout } = useAuth()
+  const user = useAuthStore((state) => state.user)
+  const logoutUser = useAuthStore((state) => state.logoutUser)
   const navigate = useNavigate()
 
   const sidebarItems = {
@@ -70,8 +72,8 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={() => {
-            logout()
-            navigate("/")
+            logoutUser()
+            navigate(HOME_ROUTE)
           }}
           style={{
             width: "100%",
