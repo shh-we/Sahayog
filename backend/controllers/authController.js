@@ -78,6 +78,15 @@ export async function register (req, res){
         message: 'Email already registered. Please login instead.'
       });
     }
+
+    // Check if phone number already exists
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number already registered. Please login instead.'
+      });
+    }
     
     // Create new user
     const userData = {
@@ -130,22 +139,22 @@ export async function register (req, res){
 //login
 export async function login (req, res) {
   try {
-    const { email, password, loginAs } = req.body;
+    const { phone, password, loginAs } = req.body;
     
   
-    if (!email || !password) {
+    if (!phone || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password'
+        message: 'Please provide phone number and password'
       });
     }
     
     // Find user and include password field
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    const user = await User.findOne({ phone }).select('+password');
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. Please check your email and password.'
+        message: 'Invalid credentials. Please check your phone number and password.'
       });
     }
     
@@ -154,7 +163,7 @@ export async function login (req, res) {
     if (!isPasswordCorrect) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials. Please check your email and password.'
+        message: 'Invalid credentials. Please check your phone number and password.'
       });
     }
     

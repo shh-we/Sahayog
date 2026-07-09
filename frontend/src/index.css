@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary1: #1b6ca8;
+  --color-primary2: #dc2626;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;

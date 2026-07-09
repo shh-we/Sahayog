@@ -9,15 +9,15 @@ export async function getStats(req, res) {
     const [
       totalEmergencies,
       activeEmergencies,
-      completedEmergencies,
+      resolvedEmergencies,
       totalResponders,
       availableResponders,
       totalUsers,
       totalAdmins
     ] = await Promise.all([
       Emergency.countDocuments(),
-      Emergency.countDocuments({ status: { $in: ["active", "assigned"] } }),
-      Emergency.countDocuments({ status: "completed" }),
+      Emergency.countDocuments({ status: { $in: ["active", "assigned", "in_progress"] } }),
+      Emergency.countDocuments({ status: "resolved" }),
       User.countDocuments({ role: "responder" }),
       User.countDocuments({ role: "responder", isAvailable: true }),
       User.countDocuments({ role: "user" }),
@@ -25,10 +25,10 @@ export async function getStats(req, res) {
     ]);
 
     // Calculate average response time
-    const emergencies = await Emergency.find({ status: "completed" }).limit(100);
+    const emergencies = await Emergency.find({ status: "resolved" }).limit(100);
     
     let totalResponseTime = 0;
-    let completedCount = 0;
+    let resolvedCount = 0;
 
     emergencies.forEach(emergency => {
       if (emergency.responders && emergency.responders.length > 0) {
@@ -36,14 +36,14 @@ export async function getStats(req, res) {
           if (responder.respondedAt && responder.arrivedAt) {
             const responseTime = new Date(responder.arrivedAt) - new Date(responder.respondedAt);
             totalResponseTime += responseTime;
-            completedCount++;
+            resolvedCount++;
           }
         });
       }
     });
 
-    const avgResponseTime = completedCount > 0 
-      ? Math.round(totalResponseTime / completedCount / 60000) // Convert to minutes
+    const avgResponseTime = resolvedCount > 0 
+      ? Math.round(totalResponseTime / resolvedCount / 60000) // Convert to minutes
       : 0;
 
     res.status(200).json({
@@ -52,7 +52,7 @@ export async function getStats(req, res) {
         emergencies: {
           total: totalEmergencies,
           active: activeEmergencies,
-          completed: completedEmergencies
+          resolved: resolvedEmergencies
         },
         responders: {
           total: totalResponders,

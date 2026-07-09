@@ -4,10 +4,11 @@ import L from 'leaflet'
 // Create custom emergency markers by type
 const getEmergencyIcon = (type) => {
   const colors = {
-    fire: '#ff0000',      // Red
-    medical: '#0000ff',   // Blue
-    accident: '#ffff00',  // Yellow
-    other: '#808080'      // Gray
+    fire: '#ff0000',           // Red
+    medical: '#0000ff',        // Blue
+    security: '#4f46e5',       // Indigo
+    natural_disaster: '#ea580c', // Orange
+    other: '#808080'           // Gray
   }
   
   const color = colors[type] || colors.other

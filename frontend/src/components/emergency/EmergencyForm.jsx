@@ -112,7 +112,8 @@ export default function EmergencyForm({ onSuccess, onClose }) {
             >
               <option value="fire">Fire 🔥</option>
               <option value="medical">Medical 🏥</option>
-              <option value="accident">Accident 🚗</option>
+              <option value="security">Security 🛡️</option>
+              <option value="natural_disaster">Natural Disaster 🌪️</option>
               <option value="other">Other 🆘</option>
             </select>
           </div>

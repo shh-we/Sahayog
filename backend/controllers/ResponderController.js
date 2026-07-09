@@ -24,24 +24,31 @@ export async function acceptEmergency(req, res) {
       });
     }
 
-    // Check if responder already accepted this emergency
-    const alreadyAccepted = emergency.responders.some(
+    // Check if responder is already in the list
+    const existingResponder = emergency.responders.find(
       (r) => r.userId.toString() === req.user.id
     );
-    if (alreadyAccepted) {
-      return res.status(400).json({
-        success: false,
-        message: "You have already accepted this emergency"
+
+    if (existingResponder) {
+      // If already accepted/active/completed, reject
+      if (["accepted", "en_route", "on_scene", "completed"].includes(existingResponder.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already accepted this emergency"
+        });
+      }
+      // Update the existing notified/declined entry
+      existingResponder.status = "accepted";
+      existingResponder.respondedAt = new Date();
+    } else {
+      // Add responder to emergency (if not previously notified)
+      emergency.responders.push({
+        userId: req.user.id,
+        status: "accepted",
+        notifiedAt: new Date(),
+        respondedAt: new Date()
       });
     }
-
-    // Add responder to emergency
-    emergency.responders.push({
-      userId: req.user.id,
-      status: "en_route",
-      notifiedAt: new Date(),
-      respondedAt: new Date()
-    });
 
     // Update emergency status to assigned
     emergency.status = "assigned";
@@ -81,13 +88,76 @@ export async function acceptEmergency(req, res) {
   }
 }
 
+// @desc    Decline an emergency
+// @route   POST /api/responders/emergencies/:id/decline
+// @access  Private - Responder only
+export async function declineEmergency(req, res) {
+  try {
+    const emergency = await Emergency.findById(req.params.id);
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: "Emergency not found"
+      });
+    }
+
+    // Check if responder already in list
+    const existingResponder = emergency.responders.find(
+      (r) => r.userId.toString() === req.user.id
+    );
+
+    if (existingResponder) {
+      if (existingResponder.status === "declined") {
+        return res.status(400).json({
+          success: false,
+          message: "You have already declined this emergency"
+        });
+      }
+      existingResponder.status = "declined";
+    } else {
+      // Add responder to emergency with declined status
+      emergency.responders.push({
+        userId: req.user.id,
+        status: "declined",
+        notifiedAt: new Date(),
+        respondedAt: new Date()
+      });
+    }
+
+    await emergency.save();
+
+    // Emit Socket.IO event
+    const io = getIO();
+    io.emit("emergency_declined", {
+      emergencyId: emergency._id,
+      responderId: req.user.id,
+      responderName: req.user.name
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Emergency declined successfully",
+      emergency
+    });
+
+  } catch (error) {
+    console.error("Error in declineEmergency:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error declining emergency",
+      error: error.message
+    });
+  }
+}
+
 // @desc    Update responder status on an emergency
 // @route   PUT /api/responders/emergencies/:id/status
 // @access  Private - Responder only
 export async function updateResponseStatus(req, res) {
   try {
     const { status } = req.body;
-    const validStatuses = ["en_route", "on_scene", "completed"];
+    const validStatuses = ["accepted", "en_route", "on_scene", "completed"];
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
@@ -108,10 +178,28 @@ export async function updateResponseStatus(req, res) {
     const responder = emergency.responders.find(
       (r) => r.userId.toString() === req.user.id
     );
-    if (!responder) {
+    if (!responder || !["accepted", "en_route", "on_scene", "completed"].includes(responder.status)) {
       return res.status(403).json({
         success: false,
-        message: "You are not assigned to this emergency"
+        message: "You are not an active responder assigned to this emergency"
+      });
+    }
+
+    // Validate state transitions
+    const statusOrder = {
+      "accepted": 1,
+      "en_route": 2,
+      "on_scene": 3,
+      "completed": 4
+    };
+
+    const currentOrder = statusOrder[responder.status] || 0;
+    const nextOrder = statusOrder[status] || 0;
+
+    if (nextOrder <= currentOrder) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status transition from ${responder.status} to ${status}`
       });
     }
 

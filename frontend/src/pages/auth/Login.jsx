@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import toast from "react-hot-toast"
+import { Eye, EyeOff } from "lucide-react"
 import { login as loginApi } from "../../api/auth.js"
 import logo from "../../assets/logo.svg"
 import useAuthStore from "../../stores/authStore.js"
@@ -16,10 +17,11 @@ export default function LoginPage() {
   const loginUser = useAuthStore((state) => state.loginUser)
 
   const [form, setForm] = useState({
-    email: "",
+    phone: "",
     password: ""
   })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -65,15 +67,16 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wider" htmlFor="email">
-              Email Address
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wider" htmlFor="phone">
+              Phone Number
             </label>
             <input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="e.g. name@example.com"
-              value={form.email}
+              id="phone"
+              name="phone"
+              type="tel"
+              pattern="[0-9]{10}"
+              placeholder="e.g. 9876543210"
+              value={form.phone}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-gray-50/50"
               required
@@ -84,16 +87,25 @@ export default function LoginPage() {
             <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wider" htmlFor="password">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-gray-50/50"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={form.password}
+                onChange={handleChange}
+                className="w-full pl-4 pr-10 py-3 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-gray-50/50"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between text-xs">
@@ -109,7 +121,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#1b6ca8] hover:bg-[#155483] disabled:bg-blue-300 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-colors shadow-md shadow-blue-500/10 cursor-pointer"
+            className="w-full bg-primary1 hover:bg-primary1/90 disabled:bg-primary1/35 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-colors shadow-md shadow-primary1/10 cursor-pointer"
           >
             {loading ? "Logging in..." : "Log In"}
           </button>
