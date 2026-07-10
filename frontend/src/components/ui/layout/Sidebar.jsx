@@ -50,11 +50,6 @@ export default function Sidebar() {
             icon: LayoutDashboard,
           },
           {
-            label: "Report Emergency",
-            path: `${USER_DASHBOARD}?tab=report`,
-            icon: AlertTriangle,
-          },
-          {
             label: "My Emergency History",
             path: `${USER_DASHBOARD}?tab=history`,
             icon: History,
@@ -208,10 +203,16 @@ export default function Sidebar() {
   return (
     <aside className="flex flex-col h-screen bg-white border-r border-gray-200 shrink-0 select-none transition-all duration-300 w-16 md:w-64">
       {/* Logo Section */}
-      <div className="flex items-center justify-center md:justify-start gap-3 px-4 md:px-6 py-5 border-b border-gray-100 shrink-0">
-        <Link to={HOME_ROUTE} className="flex items-center gap-3">
-          <img src={logo} alt="Sahayog" className="h-9 w-9 object-contain shrink-0" />
-          <span className="font-bold text-xl text-gray-900 tracking-tight hidden md:inline-block">
+      <div className="flex items-center justify-center md:justify-start px-3 md:px-8 py-6 md:py-7 border-b border-gray-100 shrink-0">
+        <Link to={HOME_ROUTE} className="flex items-center justify-center md:justify-start gap-3">
+          <span className="h-9 w-10 md:h-11 md:w-12 overflow-hidden shrink-0 flex items-start justify-center">
+            <img
+              src={logo}
+              alt="Sahayog"
+              className="h-16 w-16 md:h-20 md:w-20 max-w-none object-contain -mt-1"
+            />
+          </span>
+          <span className="hidden md:inline-block text-3xl font-bold text-[#1f73b7] leading-none">
             Sahayog
           </span>
         </Link>
@@ -219,22 +220,6 @@ export default function Sidebar() {
 
       {/* Main Navigation (Scrollable) */}
       <div className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
-        {/* Urgent Emergency Shortcut for Users Only */}
-        {user?.role === "user" && (
-          <div className="px-1 md:px-2 py-2">
-            <Link
-              to={`${USER_DASHBOARD}?tab=report`}
-              className="flex items-center justify-center gap-2 px-2 py-3 md:px-4 md:py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-md shadow-red-500/10 cursor-pointer w-full text-center"
-              title="Report Emergency"
-            >
-              <AlertTriangle className="h-5 w-5 shrink-0" />
-              <span className="hidden md:inline text-sm whitespace-nowrap">
-                Report Emergency
-              </span>
-            </Link>
-          </div>
-        )}
-
         {/* Dynamic Navigation Links */}
         <nav className="space-y-1">
           {items.map((item) => {
