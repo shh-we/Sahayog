@@ -1,92 +1,319 @@
+import { useState } from "react"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import useAuthStore from "../../../stores/authStore.js"
-import { useNavigate } from "react-router-dom"
-import { HOME_ROUTE } from "../../../constants/routes.js"
+import { HOME_ROUTE, USER_DASHBOARD, RESPONDER_DASHBOARD, ADMIN_DASHBOARD } from "../../../constants/routes.js"
+import logo from "../../../assets/logo.svg"
+import {
+  LayoutDashboard,
+  AlertTriangle,
+  History,
+  BookOpen,
+  PhoneCall,
+  User,
+  AlertCircle,
+  CheckSquare,
+  Activity,
+  MapPin,
+  Users,
+  Shield,
+  BarChart3,
+  LogOut,
+  ChevronDown,
+} from "lucide-react"
 
 export default function Sidebar() {
   const user = useAuthStore((state) => state.user)
   const logoutUser = useAuthStore((state) => state.logoutUser)
   const navigate = useNavigate()
+  const location = useLocation()
+  const currentPath = location.pathname + location.search
 
-  const sidebarItems = {
-    user: [
-      { label: "Profile", action: () => {} },
-      { label: "My Emergencies", action: () => {} },
-      { label: "Create Emergency", action: () => {} },
-      { label: "Settings", action: () => {} },
-    ],
-    responder: [
-      { label: "Profile", action: () => {} },
-      { label: "Availability", action: () => {} },
-      { label: "My Location", action: () => {} },
-      { label: "Active Assignments", action: () => {} },
-      { label: "Nearby Emergencies", action: () => {} },
-      { label: "Settings", action: () => {} },
-    ],
-    admin: [
-      { label: "Dashboard", action: () => {} },
-      { label: "Users", action: () => {} },
-      { label: "Responders", action: () => {} },
-      { label: "All Emergencies", action: () => {} },
-      { label: "Analytics", action: () => {} },
-      { label: "Profile", action: () => {} },
-    ],
+  const [expandedItems, setExpandedItems] = useState({})
+
+  // Helper to determine if a link is active based on path and query parameters
+  const isLinkActive = (itemPath) => {
+    if (itemPath.includes("?")) {
+      return currentPath === itemPath
+    }
+    const searchParams = new URLSearchParams(location.search)
+    return location.pathname === itemPath && !searchParams.get("tab")
   }
 
-  const items = sidebarItems[user?.role] || []
+  // Get configuration of sidebar items based on the user's role
+  const getSidebarItems = (role) => {
+    switch (role) {
+      case "user":
+        return [
+          {
+            label: "Dashboard",
+            path: USER_DASHBOARD,
+            icon: LayoutDashboard,
+          },
+          {
+            label: "My Emergency History",
+            path: `${USER_DASHBOARD}?tab=history`,
+            icon: History,
+          },
+          {
+            label: "First Aid Guides",
+            path: `${USER_DASHBOARD}?tab=guides`,
+            icon: BookOpen,
+            children: [
+              { label: "CPR & Choking", path: `${USER_DASHBOARD}?tab=guides&topic=cpr` },
+              { label: "Bleeding Control", path: `${USER_DASHBOARD}?tab=guides&topic=bleeding` },
+              { label: "Fractures & Burns", path: `${USER_DASHBOARD}?tab=guides&topic=fractures` },
+            ],
+          },
+          {
+            label: "Emergency Contacts",
+            path: `${USER_DASHBOARD}?tab=contacts`,
+            icon: PhoneCall,
+          },
+          {
+            label: "My Profile",
+            path: `${USER_DASHBOARD}?tab=profile`,
+            icon: User,
+          },
+        ]
+      case "responder":
+        return [
+          {
+            label: "Dashboard",
+            path: RESPONDER_DASHBOARD,
+            icon: LayoutDashboard,
+          },
+          {
+            label: "Nearby Emergencies",
+            path: `${RESPONDER_DASHBOARD}?tab=nearby`,
+            icon: AlertCircle,
+          },
+          {
+            label: "Active Assignments",
+            path: `${RESPONDER_DASHBOARD}?tab=assignments`,
+            icon: CheckSquare,
+            children: [
+              { label: "En Route", path: `${RESPONDER_DASHBOARD}?tab=assignments&status=en_route` },
+              { label: "On Scene", path: `${RESPONDER_DASHBOARD}?tab=assignments&status=on_scene` },
+            ],
+          },
+          {
+            label: "Availability Status",
+            path: `${RESPONDER_DASHBOARD}?tab=availability`,
+            icon: Activity,
+          },
+          {
+            label: "My Location",
+            path: `${RESPONDER_DASHBOARD}?tab=location`,
+            icon: MapPin,
+          },
+          {
+            label: "My Profile",
+            path: `${RESPONDER_DASHBOARD}?tab=profile`,
+            icon: User,
+          },
+        ]
+      case "admin":
+        return [
+          {
+            label: "Dashboard",
+            path: ADMIN_DASHBOARD,
+            icon: LayoutDashboard,
+          },
+          {
+            label: "Users",
+            path: `${ADMIN_DASHBOARD}?tab=users`,
+            icon: Users,
+          },
+          {
+            label: "Responders",
+            path: `${ADMIN_DASHBOARD}?tab=responders`,
+            icon: Shield,
+          },
+          {
+            label: "All Emergencies",
+            path: `${ADMIN_DASHBOARD}?tab=emergencies`,
+            icon: AlertTriangle,
+            children: [
+              { label: "Active Cases", path: `${ADMIN_DASHBOARD}?tab=emergencies&filter=active` },
+              { label: "Resolved Cases", path: `${ADMIN_DASHBOARD}?tab=emergencies&filter=resolved` },
+            ],
+          },
+          {
+            label: "Analytics",
+            path: `${ADMIN_DASHBOARD}?tab=analytics`,
+            icon: BarChart3,
+          },
+          {
+            label: "My Profile",
+            path: `${ADMIN_DASHBOARD}?tab=profile`,
+            icon: User,
+          },
+        ]
+      default:
+        return []
+    }
+  }
+
+  const items = getSidebarItems(user?.role)
+
+  // Automatically expand parent items if a child path is currently active (derived state)
+  const isItemExpanded = (item) => {
+    if (expandedItems[item.label] !== undefined) {
+      return expandedItems[item.label]
+    }
+    return !!item.children?.some((child) => isLinkActive(child.path))
+  }
+
+  const toggleExpand = (label, path) => {
+    setExpandedItems((prev) => {
+      const item = items.find((i) => i.label === label)
+      const currentVal = prev[label] !== undefined ? prev[label] : !!item?.children?.some((child) => isLinkActive(child.path))
+      return {
+        ...prev,
+        [label]: !currentVal,
+      }
+    })
+    navigate(path)
+  }
+
+  const getLinkClass = (itemPath) => {
+    const isActive = isLinkActive(itemPath)
+    return `flex items-center justify-center md:justify-start gap-3 px-3 py-3 md:px-4 md:py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer w-full ${
+      isActive
+        ? "bg-gray-100 text-gray-900 font-semibold shadow-xs"
+        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+    }`
+  }
+
+  const getSubLinkClass = (itemPath) => {
+    const isActive = isLinkActive(itemPath)
+    return `flex items-center justify-center md:justify-start gap-2 pl-3 md:pl-9 pr-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 cursor-pointer w-full ${
+      isActive
+        ? "bg-gray-50 text-gray-900 font-semibold"
+        : "text-gray-500 hover:bg-gray-50/50 hover:text-gray-900"
+    }`
+  }
+
+  const getProfileRoute = () => {
+    if (user?.role === "admin") return `${ADMIN_DASHBOARD}?tab=profile`
+    if (user?.role === "responder") return `${RESPONDER_DASHBOARD}?tab=profile`
+    return `${USER_DASHBOARD}?tab=profile`
+  }
 
   return (
-    <aside style={{
-      width: "250px",
-      borderRight: "1px solid #ccc",
-      padding: "2rem 0",
-      display: "flex",
-      flexDirection: "column",
-      height: "100vh",
-    }}>
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <nav style={{ display: "flex", flexDirection: "column" }}>
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={item.action}
-              style={{
-                padding: "1rem 1.5rem",
-                textAlign: "left",
-                border: "none",
-                background: "none",
-                cursor: "pointer",
-                borderLeft: "3px solid transparent",
-                fontSize: "1rem",
-              }}
-              onMouseEnter={(e) => e.target.style.background = "#f5f5f5"}
-              onMouseLeave={(e) => e.target.style.background = "none"}
-            >
-              {item.label}
-            </button>
-          ))}
+    <aside className="flex flex-col h-screen bg-white border-r border-gray-200 shrink-0 select-none transition-all duration-300 w-16 md:w-64">
+      {/* Logo Section */}
+      <div className="flex items-center justify-center md:justify-start px-3 md:px-8 py-6 md:py-7 border-b border-gray-100 shrink-0">
+        <Link to={HOME_ROUTE} className="flex items-center justify-center md:justify-start gap-3">
+          <span className="h-9 w-10 md:h-11 md:w-12 overflow-hidden shrink-0 flex items-start justify-center">
+            <img
+              src={logo}
+              alt="Sahayog"
+              className="h-16 w-16 md:h-20 md:w-20 max-w-none object-contain -mt-1"
+            />
+          </span>
+          <span className="hidden md:inline-block text-3xl font-bold text-[#1f73b7] leading-none">
+            Sahayog
+          </span>
+        </Link>
+      </div>
+
+      {/* Main Navigation (Scrollable) */}
+      <div className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
+        {/* Dynamic Navigation Links */}
+        <nav className="space-y-1">
+          {items.map((item) => {
+            const Icon = item.icon
+            const hasChildren = !!item.children
+            const isExpanded = isItemExpanded(item)
+
+            if (hasChildren) {
+              return (
+                <div key={item.label} className="space-y-1">
+                  <button
+                    onClick={() => toggleExpand(item.label, item.path)}
+                    className="flex items-center justify-center md:justify-between px-3 py-3 md:px-4 md:py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer w-full text-left text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    title={item.label}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <span className="hidden md:inline">{item.label}</span>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 transition-transform duration-200 hidden md:block ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {/* Collapsible Children items */}
+                  {isExpanded && (
+                    <div className="mt-1 space-y-1 hidden md:block">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.label}
+                          to={child.path}
+                          className={getSubLinkClass(child.path)}
+                        >
+                          <span className="text-gray-600 hover:text-gray-900 truncate">
+                            {child.label}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <Link
+                key={item.label}
+                to={item.path}
+                className={getLinkClass(item.path)}
+                title={item.label}
+              >
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="hidden md:inline whitespace-nowrap">{item.label}</span>
+              </Link>
+            )
+          })}
         </nav>
       </div>
 
-      <div style={{ borderTop: "1px solid #ccc", padding: "1rem 1.5rem" }}>
+      {/* Sticky Bottom Section */}
+      <div className="p-2 md:p-4 border-t border-gray-100 flex flex-col gap-2 shrink-0">
+        {/* Logout Option */}
         <button
-          type="button"
           onClick={() => {
             logoutUser()
             navigate(HOME_ROUTE)
           }}
-          style={{
-            width: "100%",
-            padding: "0.75rem",
-            background: "#ff4444",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
-            borderRadius: "4px",
-          }}
+          className="flex items-center justify-center md:justify-start gap-3 px-3 py-3 md:px-4 md:py-3 text-sm font-medium rounded-xl text-gray-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200 cursor-pointer w-full text-left"
+          title="Logout"
         >
-          Logout
+          <LogOut className="h-5 w-5 shrink-0" />
+          <span className="hidden md:inline">Logout</span>
         </button>
+
+        {/* User Account / Profile Details */}
+        <Link
+          to={getProfileRoute()}
+          className="flex items-center justify-center md:justify-start gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer"
+          title="My Profile"
+        >
+          <div className="h-10 w-10 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm select-none">
+            {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+          </div>
+          <div className="hidden md:block overflow-hidden text-left">
+            <p className="text-sm font-semibold text-gray-900 truncate leading-none mb-1">
+              {user?.name || "User"}
+            </p>
+            <p className="text-xs text-gray-500 capitalize leading-none">
+              {user?.role || "Civilian"}
+            </p>
+          </div>
+        </Link>
       </div>
     </aside>
   )
