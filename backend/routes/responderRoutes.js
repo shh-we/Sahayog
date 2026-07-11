@@ -1,6 +1,7 @@
 import express from "express";
 import {
   acceptEmergency,
+  declineEmergency,
   updateResponseStatus,
   getMyAssignments,
   submitFeedback,
@@ -18,6 +19,7 @@ const router = express.Router();
 router.put("/location", protect, authorize("responder"), updateLocation);
 router.put("/availability", protect, authorize("responder"), toggleAvailability);
 router.post("/emergencies/:id/accept", protect, authorize("responder"), acceptEmergency);
+router.post("/emergencies/:id/decline", protect, authorize("responder"), declineEmergency);
 router.put("/emergencies/:id/status", protect, authorize("responder"), updateResponseStatus);
 router.get("/my-assignments", protect, authorize("responder"), getMyAssignments);
 

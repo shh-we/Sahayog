@@ -22,11 +22,14 @@ async function runTests() {
     // Test 1: Register Responder with skills
     console.log('\n🧪 Starting Backend Tests...\n');
     
+    const responderPhone = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    const userPhone = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+
     let res = await API.post('/auth/register', {
       name: 'Responder Test',
       email: `responder-${Date.now()}@test.com`,
       password: 'password123',
-      phone: '9876543210',
+      phone: responderPhone,
       role: 'responder',
       skills: ['medical', 'fire']
     });
@@ -43,7 +46,7 @@ async function runTests() {
       name: 'User Test',
       email: `user-${Date.now()}@test.com`,
       password: 'password123',
-      phone: '9876543211',
+      phone: userPhone,
       role: 'user'
     });
     log('Register User', res.status === 201, { success: res.data.success });
@@ -52,10 +55,10 @@ async function runTests() {
 
     // Test 3: Login
     res = await API.post('/auth/login', {
-      email: `responder-${Date.now() - 1000}@test.com`,
+      phone: responderPhone,
       password: 'password123'
     });
-    log('Login (Note: Using fresh email)', res.status === 200 || res.status === 401, {
+    log('Login (Note: Using registered phone)', res.status === 200, {
       message: res.data.message
     });
 

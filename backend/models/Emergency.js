@@ -54,7 +54,7 @@ const emergencySchema = new mongoose.Schema({
     },
     status: {
       type: String,
-      enum: ['notified', 'en_route', 'on_scene', 'completed'],
+      enum: ['notified', 'accepted', 'declined', 'en_route', 'on_scene', 'completed'],
       default: 'notified',
     },
     notifiedAt: Date,
