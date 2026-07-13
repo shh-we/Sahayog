@@ -27,24 +27,7 @@ export async function getStats(req, res) {
     // Calculate average response time
     const emergencies = await Emergency.find({ status: "resolved" }).limit(100);
     
-    let totalResponseTime = 0;
-    let resolvedCount = 0;
-
-    emergencies.forEach(emergency => {
-      if (emergency.responders && emergency.responders.length > 0) {
-        emergency.responders.forEach(responder => {
-          if (responder.respondedAt && responder.arrivedAt) {
-            const responseTime = new Date(responder.arrivedAt) - new Date(responder.respondedAt);
-            totalResponseTime += responseTime;
-            resolvedCount++;
-          }
-        });
-      }
-    });
-
-    const avgResponseTime = resolvedCount > 0 
-      ? Math.round(totalResponseTime / resolvedCount / 60000) // Convert to minutes
-      : 0;
+    const avgResponseTime = 0; // Legacy responders array calculations removed
 
     res.status(200).json({
       success: true,
@@ -90,7 +73,6 @@ export async function getAllEmergencies(req, res) {
     const [emergencies, total] = await Promise.all([
       Emergency.find(filter)
         .populate("reporterId", "name email phone")
-        .populate("responders.userId", "name skills")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(Number(limit)),

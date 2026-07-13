@@ -8,6 +8,7 @@ import responderRoutes from "./routes/responderRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import {connectDB} from'./config/db.js';
 import { initializeSocket } from "./socket/index.js";
+import { startDispatchWorker } from "./workers/dispatchWorker.js";
 
 // Load environment variables
 dotenv.config();
@@ -45,3 +46,6 @@ const server = app.listen(PORT, () => {
 });
 
 initializeSocket(server);
+
+// Start the dispatch expiry worker (Feature 4)
+startDispatchWorker();

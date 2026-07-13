@@ -156,8 +156,7 @@ export async function getEmergencies(req, res) {
 export async function getEmergencyById(req, res) {
   try {
     const emergency = await Emergency.findById(req.params.id)
-      .populate("reporterId", "name phone")
-      .populate("responders.userId", "name phone skills");
+      .populate("reporterId", "name phone");
 
     if (!emergency) {
       return res.status(404).json({

@@ -58,28 +58,6 @@ const emergencySchema = new mongoose.Schema({
     enum: ['active', 'assigned', 'in_progress', 'resolved', 'cancelled'],
     default: 'active',
   },
-  responders: [{
-    userId: {
-      type:mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
-    status: {
-      type: String,
-      enum: ['notified', 'accepted', 'declined', 'en_route', 'on_scene', 'completed'],
-      default: 'notified',
-    },
-    notifiedAt: Date,
-    respondedAt: Date,
-    arrivedAt: Date,
-    completedAt: Date,
-    feedback: {
-      rating: {
-        type: Number,
-        min: 1,
-        max: 5,
-      },
-    },
-  }],
   resolvedAt: Date,
 
 }, { timestamps: true });

@@ -132,44 +132,7 @@ async function runTests() {
       emergencies: res.data.emergencies?.map(e => ({ id: e._id, type: e.type, status: e.status }))
     });
 
-    // Test 9: Accept Emergency (Responder)
-    if (emergencyId) {
-      res = await API.post(
-        `/responders/emergencies/${emergencyId}/accept`,
-        {},
-        { headers: { Authorization: `Bearer ${responderToken}` } }
-      );
-      log('Accept Emergency', res.status === 200, {
-        emergencyStatus: res.data.emergency.status,
-        responders: res.data.emergency.responders?.map(r => ({
-          userId: r.userId,
-          status: r.status
-        }))
-      });
-    }
-
-    // Test 10: Update Response Status
-    if (emergencyId) {
-      res = await API.put(
-        `/responders/emergencies/${emergencyId}/status`,
-        { status: 'on_scene' },
-        { headers: { Authorization: `Bearer ${responderToken}` } }
-      );
-      log('Update Response Status to on_scene', res.status === 200, {
-        responderStatus: res.data.responder.status,
-        arrivedAt: res.data.responder.arrivedAt ? 'set' : 'not set'
-      });
-    }
-
-    // Test 11: Get Responder Assignments
-    res = await API.get(
-      '/responders/my-assignments',
-      { headers: { Authorization: `Bearer ${responderToken}` } }
-    );
-    log('Get Responder Assignments', res.status === 200, {
-      count: res.data.count,
-      assignments: res.data.emergencies?.map(e => ({ id: e._id, type: e.type, status: e.status }))
-    });
+    // (Removed legacy Accept, Update Status, and assignments tests as they are retired in Feature 4)
 
     console.log('\n\n✅ All tests completed!\n');
 
