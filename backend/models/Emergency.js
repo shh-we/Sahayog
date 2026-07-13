@@ -59,6 +59,11 @@ const emergencySchema = new mongoose.Schema({
     default: 'active',
   },
   resolvedAt: Date,
+  responderStatus: {
+    type: String,
+    enum: ["en_route", "on_scene", "completed"],
+    default: null
+  }
 
 }, { timestamps: true });
 

@@ -5,7 +5,8 @@ import {
   getEmergencyById,
   getNearbyEmergencies,
   updateStatus,
-  deleteEmergency
+  deleteEmergency,
+  updateResponderStatus
 } from "../controllers/EmergencyController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -19,6 +20,7 @@ router.get("/:id", protect, getEmergencyById);
 
 // Responder or admin only
 router.put("/:id/status", protect, authorize("responder", "admin"), updateStatus);
+router.patch("/:id/status", protect, authorize("responder"), updateResponderStatus);
 
 // Admin or creator (handled inside controller)
 router.delete("/:id", protect, deleteEmergency);

@@ -6,6 +6,7 @@ import userRoutes from "./routes/userRoutes.js";
 import emergencyRoutes from "./routes/emergencyRoutes.js";
 import responderRoutes from "./routes/responderRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import dispatchRoutes from "./routes/dispatchRoutes.js";
 import {connectDB} from'./config/db.js';
 import { initializeSocket } from "./socket/index.js";
 import { startDispatchWorker } from "./workers/dispatchWorker.js";
@@ -32,6 +33,7 @@ app.use(express.urlencoded({
   app.use("/api/emergencies", emergencyRoutes);
   app.use("/api/responders", responderRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/dispatch", dispatchRoutes);
 
 
 

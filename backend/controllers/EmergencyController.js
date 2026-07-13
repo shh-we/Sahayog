@@ -1,6 +1,7 @@
 import Emergency from "../models/Emergency.js";
 import { getRequiredSkills } from "../services/emergencyService.js";
 import { startDispatch } from "../services/dispatchService.js";
+import { publishEmergencyStatusUpdate } from "../socket/emergencyPublisher.js";
 
 // @desc    Create new emergency
 // @route   POST /api/emergencies
@@ -334,5 +335,57 @@ export async function deleteEmergency(req, res) {
       message: "Error cancelling emergency",
       error: error.message
     });
+  }
+}
+
+// @desc    Update assigned responder status
+// @route   PATCH /api/emergencies/:id/status
+// @access  Private - Assigned Responder only
+export async function updateResponderStatus(req, res) {
+  try {
+    const { status } = req.body;
+
+    // Validate allowed statuses
+    if (!["en_route", "on_scene", "completed"].includes(status)) {
+      return res.status(400).json({ error: "invalid_status" });
+    }
+
+    const emergency = await Emergency.findById(req.params.id);
+
+    // Verify emergency exists, has an assigned responder, and matches requesting user
+    if (
+      !emergency ||
+      !emergency.assignedResponder ||
+      emergency.assignedResponder.toString() !== req.user.id.toString()
+    ) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    // Persist the status in responderStatus
+    emergency.responderStatus = status;
+
+    // Special logic for completed status
+    if (status === "completed") {
+      emergency.status = "resolved";
+      emergency.resolvedAt = new Date();
+    }
+
+    await emergency.save();
+
+    // Publish to the emergency's room
+    publishEmergencyStatusUpdate(emergency._id.toString(), {
+      status: emergency.status,
+      responderStatus: emergency.responderStatus,
+      updatedAt: emergency.updatedAt
+    });
+
+    return res.status(200).json({
+      success: true,
+      emergency
+    });
+
+  } catch (error) {
+    console.error("Error in updateResponderStatus:", error);
+    return res.status(500).json({ error: "server_error" });
   }
 }
