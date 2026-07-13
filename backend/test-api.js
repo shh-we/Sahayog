@@ -104,18 +104,16 @@ async function runTests() {
         description: 'Test emergency in downtown',
         longitude: 77.2,
         latitude: 28.6,
-        address: 'Test Street',
-        radius: 5000
+        address: 'Test Street'
       },
       { headers: { Authorization: `Bearer ${userToken}` } }
     );
     log('Create Emergency', res.status === 201, {
       type: res.data.emergency.type,
       status: res.data.emergency.status,
-      respondersNotified: res.data.respondersNotified,
-      responders: res.data.emergency.responders?.map(r => ({ userId: r.userId, status: r.status }))
+      dispatchStatus: res.data.emergency.dispatchStatus
     });
-    emergencyId = res.data.emergency._id;
+    emergencyId = res.data.emergency._id || res.data.emergency.id;
 
     // Test 8: Get Nearby Emergencies
     res = await API.get(

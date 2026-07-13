@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 
 const emergencySchema = new mongoose.Schema({
-  createdBy: {
+  reporterId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
@@ -17,24 +17,35 @@ const emergencySchema = new mongoose.Schema({
     trim: true,
     maxlength: 500,
   },
-  location: {
+  reporterLocation: {
     type: {
       type: String,
       enum: ['Point'],
       default: 'Point',
+      required: true,
     },
     coordinates: {
       type: [Number],
       required: true,
     },
-    address: {
-      type: String,
-      trim: true,
-    },
   },
-  radius: {
+  address: {
+    type: String,
+    trim: true,
+  },
+  dispatchStatus: {
+    type: String,
+    enum: ['searching', 'offered', 'assigned', 'unavailable'],
+    default: null
+  },
+  currentDispatchRadiusKm: {
     type: Number,
-    default: 10000,
+    enum: [5, 10, 15, 20],
+  },
+  assignedResponder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
   },
   requiredSkills: [{
     type: String,
@@ -73,9 +84,9 @@ const emergencySchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-emergencySchema.index({ location: '2dsphere' });
+emergencySchema.index({ reporterLocation: '2dsphere' });
 emergencySchema.index({ status: 1 });
 emergencySchema.index({ createdAt: -1 });
-emergencySchema.index({ createdBy: 1, status: 1 });
+emergencySchema.index({ reporterId: 1, status: 1 });
 
 export default mongoose.model('Emergency', emergencySchema);

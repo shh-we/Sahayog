@@ -50,7 +50,7 @@ export default function EmergencyFormPanel({
     const { name, value } = e.target
     setForm((prev) => ({
       ...prev,
-      [name]: name === "radius" ? Number(value) : value,
+      [name]: value,
     }))
   }
 
@@ -165,31 +165,7 @@ export default function EmergencyFormPanel({
           </div>
         </div>
 
-        {/* 5. Responder Search Radius */}
-        <div className="space-y-2 hidden">
-          <div className="flex items-center justify-between">
-            <label htmlFor="radius" className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-              Responder Search Radius
-            </label>
-            <span className="text-xs font-bold text-red-600">
-              {(form.radius / 1000).toFixed(0)} km
-            </span>
-          </div>
-          <input
-            id="radius"
-            name="radius"
-            type="range"
-            min="1000"
-            max="50000"
-            step="1000"
-            value={form.radius}
-            onChange={handleChange}
-            className="w-full accent-red-600 cursor-pointer h-1 bg-gray-200 rounded-lg appearance-none"
-          />
-          <p className="text-[10px] text-gray-500 leading-tight">
-            Responders inside this circle on the map will receive real-time notifications immediately.
-          </p>
-        </div>
+
 
         {/* 6. Form Actions */}
         <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 shrink-0">

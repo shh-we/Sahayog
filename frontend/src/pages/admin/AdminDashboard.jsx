@@ -130,8 +130,8 @@ export default function AdminDashboard() {
   let mapCenter = [27.7172, 85.3240]
   if (emergencies.length > 0) {
     const coords = emergencies
-      .filter(e => e.location?.coordinates)
-      .map(e => e.location.coordinates)
+      .filter(e => e.reporterLocation?.coordinates)
+      .map(e => e.reporterLocation.coordinates)
     if (coords.length > 0) {
       const avgLng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length
       const avgLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length
@@ -142,25 +142,42 @@ export default function AdminDashboard() {
   return (
     <div style={{ display: "flex", height: "100vh" }}>
       {/* Map Container */}
-      <div style={{ flex: 1, position: "relative" }}>
-        <MapComponent center={mapCenter} zoom={11}>
-          {/* Emergency Markers */}
-          {emergencies.map(emergency => (
-            <EmergencyMarker
-              key={emergency._id}
-              emergency={emergency}
-              onClick={setSelectedEmergency}
-            />
-          ))}
+      <div style={{
+        flex: 1,
+        position: "relative",
+        background: "#f1f5f9",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1.5rem"
+      }}>
+        <div style={{
+          width: "90%",
+          height: "85%",
+          borderRadius: "16px",
+          overflow: "hidden",
+          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+          position: "relative"
+        }}>
+          <MapComponent center={mapCenter} zoom={12}>
+            {/* Emergency Markers */}
+            {emergencies.map(emergency => (
+              <EmergencyMarker
+                key={emergency._id}
+                emergency={emergency}
+                onClick={setSelectedEmergency}
+              />
+            ))}
 
-          {/* Responder Markers */}
-          {responders.map(responder => (
-            <ResponderMarker
-              key={responder._id}
-              responder={responder}
-            />
-          ))}
-        </MapComponent>
+            {/* Responder Markers */}
+            {responders.map(responder => (
+              <ResponderMarker
+                key={responder._id}
+                responder={responder}
+              />
+            ))}
+          </MapComponent>
+        </div>
       </div>
 
       {/* Sidebar - Admin Stats */}

@@ -250,7 +250,7 @@ export async function getMyAssignments(req, res) {
       "responders.userId": req.user.id,
       status: { $in: ["assigned", "in_progress"] }
     })
-      .populate("createdBy", "name phone")
+      .populate("reporterId", "name phone")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -292,7 +292,7 @@ export async function submitFeedback(req, res) {
     }
 
     // Only the emergency creator can submit feedback
-    if (emergency.createdBy.toString() !== req.user.id) {
+    if (emergency.reporterId.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: "Only the emergency creator can submit feedback"

@@ -42,7 +42,6 @@ export default function EmergencyForm({ onSuccess, onClose }) {
     address: "",
     longitude: 85.324,
     latitude: 27.7172,
-    radius: 5000,
   })
   const [loading, setLoading] = useState(false)
 
@@ -52,7 +51,7 @@ export default function EmergencyForm({ onSuccess, onClose }) {
     const { name, value } = event.target
     setForm((previous) => ({
       ...previous,
-      [name]: name === "radius" ? Number(value) : value,
+      [name]: value,
     }))
   }
 
@@ -95,7 +94,6 @@ export default function EmergencyForm({ onSuccess, onClose }) {
         address: form.address.trim(),
         longitude: Number(form.longitude),
         latitude: Number(form.latitude),
-        radius: Number(form.radius),
       })
 
       toast.success("Emergency reported successfully")
@@ -128,7 +126,7 @@ export default function EmergencyForm({ onSuccess, onClose }) {
             Report Emergency
           </h1>
 
-          <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,1.5fr)]">
             <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
               <div className="border-b border-gray-200 px-4 py-4">
                 <h2 className="text-sm font-semibold text-gray-950">Select Location</h2>
@@ -137,7 +135,7 @@ export default function EmergencyForm({ onSuccess, onClose }) {
                 </p>
               </div>
 
-              <div className="h-[320px] overflow-hidden md:h-[430px]">
+              <div className="h-[200px] overflow-hidden md:h-[280px]">
                 <MapComponent center={markerPosition} zoom={15}>
                   <DraggableLocationMarker position={markerPosition} onChange={updateLocation} />
                 </MapComponent>
@@ -169,15 +167,12 @@ export default function EmergencyForm({ onSuccess, onClose }) {
                 </button>
               </div>
 
-              <div className="grid gap-3 border-t border-gray-100 p-4 text-sm text-gray-600 md:grid-cols-3">
+              <div className="grid gap-3 border-t border-gray-100 p-4 text-sm text-gray-600 md:grid-cols-2">
                 <p>
                   <span className="font-semibold text-gray-950">Latitude:</span> {form.latitude}
                 </p>
                 <p>
                   <span className="font-semibold text-gray-950">Longitude:</span> {form.longitude}
-                </p>
-                <p>
-                  <span className="font-semibold text-gray-950">Radius:</span> {form.radius}m
                 </p>
               </div>
             </section>
@@ -195,11 +190,10 @@ export default function EmergencyForm({ onSuccess, onClose }) {
                       key={item.value}
                       type="button"
                       onClick={() => setForm((previous) => ({ ...previous, type: item.value }))}
-                      className={`flex items-center gap-3 rounded-md border px-4 py-3 text-left transition ${
-                        selected
-                          ? "border-gray-900 bg-gray-50 shadow-sm"
-                          : "border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50"
-                      }`}
+                      className={`flex items-center gap-3 rounded-md border px-4 py-3 text-left transition ${selected
+                        ? "border-gray-900 bg-gray-50 shadow-sm"
+                        : "border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50"
+                        }`}
                     >
                       <span
                         className="flex h-6 w-6 items-center justify-center rounded-full"
@@ -225,23 +219,7 @@ export default function EmergencyForm({ onSuccess, onClose }) {
                 className="mt-2 min-h-32 w-full resize-y rounded-md border border-gray-300 px-3 py-3 text-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
               />
 
-              <label htmlFor="radius" className="mt-5 block text-sm font-semibold text-gray-950">
-                Responder Search Radius
-              </label>
-              <input
-                id="radius"
-                name="radius"
-                type="range"
-                min="1000"
-                max="50000"
-                step="1000"
-                value={form.radius}
-                onChange={handleChange}
-                className="mt-3 w-full accent-red-600"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Responders within {(form.radius / 1000).toFixed(0)} km will be notified.
-              </p>
+
 
               <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 {onClose && (

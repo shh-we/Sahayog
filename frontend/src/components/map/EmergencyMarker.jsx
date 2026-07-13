@@ -34,7 +34,7 @@ const getEmergencyIcon = (type) => {
 }
 
 export default function EmergencyMarker({ emergency, onClick }) {
-  const [longitude, latitude] = emergency.location?.coordinates || [null, null]
+  const [longitude, latitude] = emergency.reporterLocation?.coordinates || [null, null]
   const { type, description } = emergency
 
   // Don't render if coordinates are missing

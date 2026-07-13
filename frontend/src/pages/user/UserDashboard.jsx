@@ -38,14 +38,12 @@ export default function UserDashboard() {
   const [selectedEmergency, setSelectedEmergency] = useState(null)
   const [userLocation, setUserLocation] = useState([27.7172, 85.3240]) // Default Kathmandu coords
 
-  // Form State for Emergency Panel
   const [form, setForm] = useState({
     type: "fire",
     description: "",
     address: "",
     longitude: 85.324,
     latitude: 27.7172,
-    radius: 5000,
   })
   const [formLoading, setFormLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
@@ -212,7 +210,6 @@ export default function UserDashboard() {
         address: form.address.trim(),
         longitude: Number(form.longitude),
         latitude: Number(form.latitude),
-        radius: Number(form.radius),
       })
 
       toast.success("Emergency reported successfully")
@@ -227,7 +224,6 @@ export default function UserDashboard() {
         address: "",
         longitude: userLocation[1],
         latitude: userLocation[0],
-        radius: 5000,
       })
 
       // Set submission success state instead of redirecting
@@ -243,7 +239,7 @@ export default function UserDashboard() {
   // --- Sub-panel Render Functions ---
   const renderHistory = ({ fullPage = false } = {}) => {
     const userEmergencies = emergencies
-      .filter((e) => e.createdBy === user?.id || e.createdBy?._id === user?.id)
+      .filter((e) => e.reporterId === user?.id || e.reporterId?._id === user?.id)
       .filter((e, index, list) => list.findIndex((item) => item._id === e._id) === index)
 
     return (
@@ -676,11 +672,6 @@ export default function UserDashboard() {
                     updateFormLocation(nextPosition.lat, nextPosition.lng)
                   },
                 }}
-              />
-              <Circle
-                center={[form.latitude, form.longitude]}
-                radius={form.radius}
-                pathOptions={{ color: "#dc2626", fillColor: "#dc2626", fillOpacity: 0.12 }}
               />
             </>
           )}

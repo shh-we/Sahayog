@@ -1,21 +1,59 @@
 import Emergency from "../models/Emergency.js";
-import { getRequiredSkills, findNearbyResponders } from "../services/emergencyService.js";
-import { notifyNearbyResponders } from "../socket/emergencySocket.js";
-import { getIO } from "../socket/index.js";
+import { getRequiredSkills } from "../services/emergencyService.js";
+import { startDispatch } from "../services/dispatchService.js";
 
 // @desc    Create new emergency
 // @route   POST /api/emergencies
 // @access  Private - Any logged in user
-
 export async function createEmergency(req, res) {
   try {
-    const { type, description, longitude, latitude, address, radius = 10000 } = req.body;
+    const { type, description, longitude, latitude, address } = req.body;
 
-    // 1. Validate required fields
-    if (!type || longitude === undefined || latitude === undefined) {
+    // 1. Validate type
+    if (!type || typeof type !== 'string' || type.trim() === '') {
       return res.status(400).json({
         success: false,
-        message: "Please provide type, longitude and latitude"
+        message: "Please provide a valid type"
+      });
+    }
+
+    // 2. Validate coordinates are present and not null/empty/whitespace/non-numeric
+    if (
+      latitude === undefined || latitude === null ||
+      longitude === undefined || longitude === null ||
+      (typeof latitude !== 'number' && typeof latitude !== 'string') ||
+      (typeof longitude !== 'number' && typeof longitude !== 'string') ||
+      (typeof latitude === 'string' && latitude.trim() === '') ||
+      (typeof longitude === 'string' && longitude.trim() === '')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide valid longitude and latitude"
+      });
+    }
+
+    // 3. Ensure they are finite numbers (rejects NaN, Infinity, -Infinity)
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        success: false,
+        message: "Coordinates must be finite numbers"
+      });
+    }
+
+    // 4. Range validation
+    if (lat < -90 || lat > 90) {
+      return res.status(400).json({
+        success: false,
+        message: "Latitude must be between -90 and 90"
+      });
+    }
+    if (lon < -180 || lon > 180) {
+      return res.status(400).json({
+        success: false,
+        message: "Longitude must be between -180 and 180"
       });
     }
 
@@ -23,57 +61,40 @@ export async function createEmergency(req, res) {
 
     // 2. Create emergency
     const emergency = await Emergency.create({
-      createdBy: req.user.id,
+      reporterId: req.user.id,
       type,
       description,
-      location: {
+      reporterLocation: {
         type: "Point",
-        coordinates: [Number(longitude), Number(latitude)],
-        address
+        coordinates: [lon, lat]
       },
-      radius: Number(radius),
+      address,
       requiredSkills
     });
 
     if (!emergency) {
-      throw new Error("Failed to create emergency")
+      throw new Error("Failed to create emergency");
     }
 
-    const responders = await findNearbyResponders(
-      emergency.location,
-      requiredSkills,
-      Number(radius)
-    );
+    // Start dispatch process using the Feature 4 placeholder service
+    await startDispatch(emergency._id);
 
-    emergency.responders = responders.map((responder) => ({
-      userId: responder._id,
-      status: "notified",
-      notifiedAt: new Date()
-    }));
-
-    await emergency.save();
-
-    if (responders.length > 0) {
-      notifyNearbyResponders(responders, emergency);
-    }
-
-    // Broadcast new emergency to all admins
-    const io = getIO();
-    io.emit("new_emergency", {
-      _id: emergency._id,
-      type: emergency.type,
-      description: emergency.description,
-      location: emergency.location,
-      createdBy: emergency.createdBy,
-      createdAt: emergency.createdAt,
-      status: emergency.status
-    });
-
+    // Response includes at minimum: id, status, dispatchStatus, and createdAt
     res.status(201).json({
       success: true,
       message: "Emergency reported successfully",
-      emergency,
-      respondersNotified: responders.length
+      emergency: {
+        id: emergency._id,
+        _id: emergency._id,
+        status: emergency.status,
+        dispatchStatus: emergency.dispatchStatus !== undefined ? emergency.dispatchStatus : null,
+        createdAt: emergency.createdAt,
+        reporterId: emergency.reporterId,
+        reporterLocation: emergency.reporterLocation,
+        address: emergency.address,
+        type: emergency.type,
+        description: emergency.description
+      }
     });
 
   } catch (error) {
@@ -99,12 +120,12 @@ export async function getEmergencies(req, res) {
 
     // User sees only their own emergencies
     if (req.user.role === "user") {
-      filter.createdBy = req.user.id;
+      filter.reporterId = req.user.id;
     }
 
     const [emergencies, total] = await Promise.all([
       Emergency.find(filter)
-        .populate("createdBy", "name phone")
+        .populate("reporterId", "name phone")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(Number(limit)),
@@ -135,7 +156,7 @@ export async function getEmergencies(req, res) {
 export async function getEmergencyById(req, res) {
   try {
     const emergency = await Emergency.findById(req.params.id)
-      .populate("createdBy", "name phone")
+      .populate("reporterId", "name phone")
       .populate("responders.userId", "name phone skills");
 
     if (!emergency) {
@@ -148,7 +169,7 @@ export async function getEmergencyById(req, res) {
     // User can only view their own emergency
     if (
       req.user.role === "user" &&
-      emergency.createdBy._id.toString() !== req.user.id
+      emergency.reporterId._id.toString() !== req.user.id
     ) {
       return res.status(403).json({
         success: false,
@@ -187,7 +208,7 @@ export async function getNearbyEmergencies(req, res) {
 
     const emergencies = await Emergency.find({
       status: "active",
-      location: {
+      reporterLocation: {
         $near: {
           $geometry: {
             type: "Point",
@@ -196,7 +217,7 @@ export async function getNearbyEmergencies(req, res) {
           $maxDistance: Number(radius)
         }
       }
-    }).populate("createdBy", "name phone");
+    }).populate("reporterId", "name phone");
 
     res.status(200).json({
       success: true,
@@ -282,7 +303,7 @@ export async function deleteEmergency(req, res) {
     // Only admin or the creator can delete
     if (
       req.user.role !== "admin" &&
-      emergency.createdBy.toString() !== req.user.id
+      emergency.reporterId.toString() !== req.user.id
     ) {
       return res.status(403).json({
         success: false,

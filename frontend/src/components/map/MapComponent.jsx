@@ -13,6 +13,10 @@ L.Icon.Default.mergeOptions({
 export default function MapComponent({ 
   center = [27.7172, 85.3240], // Kathmandu center
   zoom = 13, 
+  minZoom = 12,
+  maxZoom = 18,
+  width = '100%',
+  height = '100%',
   children 
 }) {
   // Kathmandu bounds to prevent zooming out
@@ -25,11 +29,11 @@ export default function MapComponent({
     <MapContainer 
       center={center} 
       zoom={zoom}
-      minZoom={11}
-      maxZoom={18}
+      minZoom={minZoom}
+      maxZoom={maxZoom}
       maxBounds={kathmandBounds}
       maxBoundsViscosity={1.0}
-      style={{ width: '100%', height: '100%' }}
+      style={{ width, height }}
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

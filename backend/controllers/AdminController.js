@@ -89,7 +89,7 @@ export async function getAllEmergencies(req, res) {
 
     const [emergencies, total] = await Promise.all([
       Emergency.find(filter)
-        .populate("createdBy", "name email phone")
+        .populate("reporterId", "name email phone")
         .populate("responders.userId", "name skills")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
