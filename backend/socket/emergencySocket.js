@@ -1,22 +1,24 @@
-import { getIO } from "./index.js";
+/**
+ * socket/emergencySocket.js
+ *
+ * RETIRED — legacy notification path.
+ *
+ * The `notifyNearbyResponders` function previously emitted `new_emergency`
+ * as a global broadcast to individual responder rooms using the old
+ * client-controlled join mechanism.
+ *
+ * This is now a no-op stub retained only to prevent import errors from any
+ * remaining legacy callers during the transition.  Feature 4 must use
+ * `publishDispatchOffer` from `emergencyPublisher.js` instead.
+ *
+ * DO NOT add logic to this file.  It will be deleted once Feature 4 is complete.
+ */
 
-// Notify nearby responders when emergency is created
-export function notifyNearbyResponders(responders, emergency) {
-  const io = getIO();
-
-  responders.forEach((responder) => {
-    // Send notification to each responder's room
-    io.to(responder._id.toString()).emit("new_emergency", {
-      message: `New ${emergency.type} emergency ${responder.distance}km away`,
-      emergency: {
-        _id: emergency._id,
-        type: emergency.type,
-        description: emergency.description,
-        location: emergency.location,
-        distance: responder.distance
-      }
-    });
-  });
-
-  console.log(`Notified ${responders.length} responders`);
+/**
+ * @deprecated Use publishDispatchOffer from emergencyPublisher.js instead.
+ * This function is a no-op and will be removed with Feature 4.
+ */
+export function notifyNearbyResponders(_responders, _emergency) {
+  // Intentionally empty — retired in Feature 5.
+  // Feature 4 will call publishDispatchOffer() for each selected candidate.
 }

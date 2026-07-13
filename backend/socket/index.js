@@ -1,7 +1,30 @@
+/**
+ * socket/index.js
+ *
+ * Socket.IO server initialization.
+ *
+ * What changed from the legacy version:
+ *  - Added socketAuthMiddleware: every connection is rejected unless it carries
+ *    a valid JWT in handshake.auth.token.
+ *  - Server joins each authenticated socket to `user:<id>` immediately on connect.
+ *  - Registered the server-authorized `emergency:join` event via roomService.
+ *  - Removed the unsafe client-controlled `join(userId)` event entirely.
+ *  - No global broadcasts. No dispatch:accept / dispatch:decline handlers.
+ */
+
 import { Server } from "socket.io";
+import { socketAuthMiddleware } from "../middleware/socketAuth.js";
+import { joinUserRoom, registerEmergencyJoin } from "./roomService.js";
 
 let io;
 
+/**
+ * Creates and configures the Socket.IO server.
+ * Must be called once after the HTTP server is listening.
+ *
+ * @param {import("http").Server} server
+ * @returns {import("socket.io").Server}
+ */
 export function initializeSocket(server) {
   io = new Server(server, {
     cors: {
@@ -15,28 +38,41 @@ export function initializeSocket(server) {
     }
   });
 
-  io.on("connection", (socket) => {
-    console.log(`User connected: ${socket.id}`);
+  // ── Authentication gate ────────────────────────────────────────────────────
+  // Every connection must pass JWT auth before any event handler runs.
+  io.use(socketAuthMiddleware);
 
-    // Responder joins their own room using their userId
-    //  send them targeted notifications
-    socket.on("join", (userId) => {
-      socket.join(userId);
-      console.log(`User ${userId} joined their room`);
-    });
+  // ── Per-connection setup ───────────────────────────────────────────────────
+  io.on("connection", (socket) => {
+    const { id, role } = socket.data.user;
+    console.log(`[socket] authenticated connection: socketId=${socket.id} userId=${id} role=${role}`);
+
+    // Server joins the socket to its private user room — not the client.
+    joinUserRoom(socket);
+
+    // Register the controlled emergency room subscription event.
+    registerEmergencyJoin(socket);
 
     socket.on("disconnect", () => {
-      console.log(`User disconnected: ${socket.id}`);
+      console.log(`[socket] disconnected: socketId=${socket.id} userId=${id}`);
     });
+
+    // NOTE: The legacy client-controlled `join(userId)` event has been removed.
+    // NOTE: dispatch:accept and dispatch:decline are HTTP-only (Feature 6).
   });
 
   return io;
 }
 
-// Export io instance so other files can use it
+/**
+ * Returns the initialized Socket.IO server instance.
+ * Throws if called before initializeSocket().
+ *
+ * @returns {import("socket.io").Server}
+ */
 export function getIO() {
   if (!io) {
-    throw new Error("Socket.io not initialized");
+    throw new Error("Socket.IO has not been initialized yet");
   }
   return io;
 }

@@ -1,6 +1,8 @@
 import Emergency from "../models/Emergency.js";
 import User from "../models/User.js";
-import { getIO } from "../socket/index.js";
+// Socket notifications for this controller will be sent by Feature 4/6/7
+// via emergencyPublisher.js (publishResponderAssigned, publishEmergencyStatusUpdate).
+// Do not import getIO() directly here.
 
 // @desc    Accept an emergency
 // @route   POST /api/responders/emergencies/:id/accept
@@ -63,14 +65,7 @@ export async function acceptEmergency(req, res) {
       }
     });
 
-    // Emit Socket.IO event to notify all users
-    const io = getIO();
-    io.emit("emergency_accepted", {
-      emergencyId: emergency._id,
-      responderId: req.user.id,
-      responderName: req.user.name,
-      status: "assigned"
-    });
+    // Feature 4 will call publishResponderAssigned() after formal dispatch acceptance.
 
     res.status(200).json({
       success: true,
@@ -127,13 +122,7 @@ export async function declineEmergency(req, res) {
 
     await emergency.save();
 
-    // Emit Socket.IO event
-    const io = getIO();
-    io.emit("emergency_declined", {
-      emergencyId: emergency._id,
-      responderId: req.user.id,
-      responderName: req.user.name
-    });
+    // Feature 6 decline HTTP handler will notify via publisher if needed.
 
     res.status(200).json({
       success: true,
@@ -215,15 +204,7 @@ export async function updateResponseStatus(req, res) {
 
     await emergency.save();
 
-    // Emit Socket.IO event to notify users and admin
-    const io = getIO();
-    io.emit("status_update", {
-      emergencyId: emergency._id,
-      responderId: req.user.id,
-      responderName: req.user.name,
-      status: status,
-      emergencyStatus: emergency.status
-    });
+    // Feature 7 will call publishEmergencyStatusUpdate() after a status mutation.
 
     res.status(200).json({
       success: true,
