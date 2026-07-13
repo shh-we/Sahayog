@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import { calculateDistance } from "./geoService.js";
 
 //  Skill map
 const skillMap = {
@@ -14,35 +15,8 @@ export function getRequiredSkills(type) {
   return skillMap[type] || ["general"];
 }
 
-//  Haversine formula 
-// Calculates distance in km between two coordinates
-function haversineDistance(coords1, coords2) {
-  const R = 6371; // Earth's radius in km
-
-  const lat1 = coords1[1];
-  const lon1 = coords1[0];
-  const lat2 = coords2[1];
-  const lon2 = coords2[0];
-
-  // Convert degrees to radians
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-
-  // Haversine formula
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) *
-    Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // distance in km
-}
-
 //  Find nearby responders 
-// uses Haversine formula
+// uses Haversine formula from geoService
 export async function findNearbyResponders(location, requiredSkills, radius = 10000) {
   // radius in meters, default 10000m (10km)
   const radiusKm = Number(radius) / 1000;
@@ -58,7 +32,7 @@ export async function findNearbyResponders(location, requiredSkills, radius = 10
   //  Calculate distance for each responder using Haversine
   const respondersWithDistance = responders
     .map((responder) => {
-      const distance = haversineDistance(
+      const distance = calculateDistance(
         location.coordinates,
         responder.location.coordinates
       );
