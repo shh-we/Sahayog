@@ -4,7 +4,8 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import EmergencyForm from "../../components/emergency/EmergencyForm.jsx"
 import StatusUpdateForm from "../../components/responder/StatusUpdateForm.jsx"
-import { useSocket, SOCKET_EVENTS } from "../../hooks/useSocket.js"
+import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
+import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies } from "../../api/emergency.js"
 import { toggleAvailability, updateLocation, getMyAssignments, acceptEmergency } from "../../api/responder.js"
 import toast from "react-hot-toast"
@@ -63,51 +64,39 @@ export default function ResponderDashboard() {
   }, [responderLocation])
 
   // Socket.IO real-time updates
-  const socket = useSocket()
+  const socket = useSocketInstance()
+  useEmergencyRoom(selectedEmergency?._id || selectedAssignment?._id || null)
 
   useEffect(() => {
     if (!socket || !user?.id) return
 
-    // Join responder room for targeted notifications
-    socket.emit('join', user.id)
-
-    // Listen for new emergencies nearby
-    socket.on(SOCKET_EVENTS.NEW_EMERGENCY, (emergency) => {
-      setNearbyEmergencies(prev => {
-        // Add only if not already in list
-        if (!prev.find(e => e._id === emergency._id)) {
-          toast.success('🚨 New emergency in your area!')
-          return [emergency, ...prev]
-        }
-        return prev
-      })
+    // Received on the responder's private user room (user:<responderId>).
+    // The dispatch modal UI is owned by a future feature; log for now.
+    socket.on(SOCKET_EVENTS.DISPATCH_OFFER, (offer) => {
+      // TODO (Feature dispatch modal): show offer modal with offer.attemptId,
+      // offer.emergencyType, offer.etaSeconds, offer.expiresAt
     })
 
-    // Listen for emergency accepted notifications (to refresh assignments)
-    socket.on(SOCKET_EVENTS.EMERGENCY_ACCEPTED, (data) => {
-      if (data.responderId === user.id) {
-        // Refresh my assignments
-        getMyAssignments().then(res => {
-          setAssignments(res.data.emergencies || [])
-          toast.success('Emergency accepted!')
-        })
-      }
+    // Received via the emergency room joined by useEmergencyRoom above.
+    // Fires when this (or another) responder is confirmed assigned.
+    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+      setAssignments(prev =>
+        prev.map(a => a._id === data.emergencyId ? { ...a, status: "assigned", assignedResponder: data.responderId } : a)
+      )
     })
 
-    // Listen for status updates
-    socket.on(SOCKET_EVENTS.STATUS_UPDATE, (data) => {
-      if (data.responderId === user.id) {
-        // Update local assignment if status changed
-        setAssignments(prev =>
-          prev.map(a => a._id === data.emergencyId ? { ...a, status: data.status } : a)
-        )
-      }
+    // emergency:statusUpdate fires when the responder updates their own progress
+    // (en_route / on_scene / completed→resolved). Reflect in local assignment list.
+    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
+      setAssignments(prev =>
+        prev.map(a => a._id === data.emergencyId ? { ...a, status: data.status } : a)
+      )
     })
 
     return () => {
-      socket.off(SOCKET_EVENTS.NEW_EMERGENCY)
-      socket.off(SOCKET_EVENTS.EMERGENCY_ACCEPTED)
-      socket.off(SOCKET_EVENTS.STATUS_UPDATE)
+      socket.off(SOCKET_EVENTS.DISPATCH_OFFER)
+      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
+      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
     }
   }, [socket, user?.id])
 
