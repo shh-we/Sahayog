@@ -5,7 +5,8 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.jsx"
-import { useSocket, SOCKET_EVENTS } from "../../hooks/useSocket.js"
+import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
+import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies, createEmergency } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
 import { Marker, Circle, useMapEvents } from "react-leaflet"
@@ -122,51 +123,30 @@ export default function UserDashboard() {
   }, [activeTab])
 
   // Socket.IO real-time updates
-  const socket = useSocket()
+  const socket = useSocketInstance()
+  useEmergencyRoom(selectedEmergency?._id || null)
 
   useEffect(() => {
     if (!socket || !user?.id) return
 
-    // Join user room for targeted notifications
-    socket.emit('join', user.id)
-
-    // Listen for new emergencies nearby
-    socket.on(SOCKET_EVENTS.NEW_EMERGENCY, (emergency) => {
-      setEmergencies(prev => {
-        // Add only if not already in list
-        if (!prev.find(e => e._id === emergency._id)) {
-          toast.success('🚨 New emergency nearby!')
-          return [emergency, ...prev]
-        }
-        return prev
-      })
-    })
-
-    // Listen for responder status updates
-    socket.on(SOCKET_EVENTS.RESPONDER_ONLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: true } : r)
+    // Reporter receives these via the emergency room joined by useEmergencyRoom above.
+    // responder:assigned — a responder was assigned to an emergency the user is watching.
+    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
       )
     })
 
-    socket.on(SOCKET_EVENTS.RESPONDER_OFFLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: false } : r)
-      )
-    })
-
-    // Listen for location updates
-    socket.on(SOCKET_EVENTS.LOCATION_UPDATE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, latitude: responder.latitude, longitude: responder.longitude } : r)
+    // emergency:statusUpdate — status changed (en_route / on_scene / resolved).
+    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
       )
     })
 
     return () => {
-      socket.off(SOCKET_EVENTS.NEW_EMERGENCY)
-      socket.off(SOCKET_EVENTS.RESPONDER_ONLINE)
-      socket.off(SOCKET_EVENTS.RESPONDER_OFFLINE)
-      socket.off(SOCKET_EVENTS.LOCATION_UPDATE)
+      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
+      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
     }
   }, [socket, user?.id])
 
