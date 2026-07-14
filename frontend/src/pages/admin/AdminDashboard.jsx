@@ -3,7 +3,8 @@ import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
-import { useSocket, SOCKET_EVENTS } from "../../hooks/useSocket.js"
+import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
+import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getEmergencies } from "../../api/emergency.js"
 import { getAllResponders, getStats } from "../../api/admin.js"
 import toast from "react-hot-toast"
@@ -49,78 +50,34 @@ export default function AdminDashboard() {
   }, [])
 
   // Socket.IO real-time updates for admin
-  const socket = useSocket()
+  const socket = useSocketInstance()
+  useEmergencyRoom(selectedEmergency?._id || null)
 
   useEffect(() => {
     if (!socket) return
 
-    // Join admin room
-    socket.emit('join', user?.id)
+    // Admin receives these only via the emergency room joined by useEmergencyRoom above
+    // (when selectedEmergency is set). Feature 5 does not publish any global feed.
 
-    // Listen for new emergencies
-    socket.on(SOCKET_EVENTS.NEW_EMERGENCY, (emergency) => {
-      setEmergencies(prev => {
-        if (!prev.find(e => e._id === emergency._id)) {
-          toast.success(' New emergency reported!')
-          return [emergency, ...prev]
-        }
-        return prev
-      })
-      
-      // Update stats
-      setStats(prev => ({
-        ...prev,
-        emergencies: {
-          ...prev.emergencies,
-          total: prev.emergencies.total + 1,
-          active: prev.emergencies.active + 1
-        }
-      }))
-    })
-
-    // Listen for emergency status updates
-    socket.on(SOCKET_EVENTS.STATUS_UPDATE, (data) => {
+    // emergency:statusUpdate — status change in the currently selected emergency.
+    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
       setEmergencies(prev =>
         prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
       )
     })
 
-    // Listen for responder availability changes
-    socket.on(SOCKET_EVENTS.RESPONDER_ONLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: true } : r)
-      )
-      setStats(prev => ({
-        ...prev,
-        responders: { ...prev.responders, available: prev.responders.available + 1 }
-      }))
-    })
-
-    socket.on(SOCKET_EVENTS.RESPONDER_OFFLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: false } : r)
-      )
-      setStats(prev => ({
-        ...prev,
-        responders: { ...prev.responders, available: Math.max(0, prev.responders.available - 1) }
-      }))
-    })
-
-    // Listen for location updates
-    socket.on(SOCKET_EVENTS.LOCATION_UPDATE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, latitude: responder.latitude, longitude: responder.longitude } : r)
+    // responder:assigned — a responder was confirmed on the selected emergency.
+    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
       )
     })
 
     return () => {
-      socket.off(SOCKET_EVENTS.NEW_EMERGENCY)
-      socket.off(SOCKET_EVENTS.STATUS_UPDATE)
-      socket.off(SOCKET_EVENTS.RESPONDER_ONLINE)
-      socket.off(SOCKET_EVENTS.RESPONDER_OFFLINE)
-      socket.off(SOCKET_EVENTS.LOCATION_UPDATE)
+      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
+      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
     }
-  }, [socket, user?.id])
+  }, [socket])
 
   if (loading) {
     return <div>Loading admin dashboard...</div>

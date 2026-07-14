@@ -5,7 +5,8 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.jsx"
-import { useSocket, SOCKET_EVENTS } from "../../hooks/useSocket.js"
+import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
+import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
 import { Marker, Circle, useMapEvents, useMap } from "react-leaflet"
@@ -174,51 +175,30 @@ export default function UserDashboard() {
   }, [activeTab])
 
   // Socket.IO real-time updates
-  const socket = useSocket()
+  const socket = useSocketInstance()
+  useEmergencyRoom(selectedEmergency?._id || null)
 
   useEffect(() => {
     if (!socket || !user?.id) return
 
-    // Join user room for targeted notifications
-    socket.emit('join', user.id)
-
-    // Listen for new emergencies nearby
-    socket.on(SOCKET_EVENTS.NEW_EMERGENCY, (emergency) => {
-      setEmergencies(prev => {
-        // Add only if not already in list
-        if (!prev.find(e => e._id === emergency._id)) {
-          toast.success('🚨 New emergency nearby!')
-          return [emergency, ...prev]
-        }
-        return prev
-      })
-    })
-
-    // Listen for responder status updates
-    socket.on(SOCKET_EVENTS.RESPONDER_ONLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: true } : r)
+    // Reporter receives these via the emergency room joined by useEmergencyRoom above.
+    // responder:assigned — a responder was assigned to an emergency the user is watching.
+    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
       )
     })
 
-    socket.on(SOCKET_EVENTS.RESPONDER_OFFLINE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, isAvailable: false } : r)
-      )
-    })
-
-    // Listen for location updates
-    socket.on(SOCKET_EVENTS.LOCATION_UPDATE, (responder) => {
-      setResponders(prev =>
-        prev.map(r => r._id === responder._id ? { ...r, latitude: responder.latitude, longitude: responder.longitude } : r)
+    // emergency:statusUpdate — status changed (en_route / on_scene / resolved).
+    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
       )
     })
 
     return () => {
-      socket.off(SOCKET_EVENTS.NEW_EMERGENCY)
-      socket.off(SOCKET_EVENTS.RESPONDER_ONLINE)
-      socket.off(SOCKET_EVENTS.RESPONDER_OFFLINE)
-      socket.off(SOCKET_EVENTS.LOCATION_UPDATE)
+      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
+      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
     }
   }, [socket, user?.id])
 
@@ -265,10 +245,10 @@ export default function UserDashboard() {
       })
 
       toast.success("Emergency reported successfully")
-      
+
       // Update local state list
       setEmergencies((prev) => [response.data.emergency, ...prev])
-      
+
       // Reset form
       setForm({
         type: "fire",
@@ -304,7 +284,7 @@ export default function UserDashboard() {
             History of cases you reported
           </p>
         </div>
-        
+
         {userEmergencies.length === 0 ? (
           <div className="text-center py-8 text-gray-500 text-sm bg-white rounded-xl border border-gray-200 p-4">
             No emergencies reported by you yet.
@@ -326,12 +306,12 @@ export default function UserDashboard() {
                     <td className="px-4 py-4 text-sm text-gray-500">
                       {e.createdAt
                         ? new Date(e.createdAt).toLocaleString([], {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
                         : "N/A"}
                     </td>
                     <td className="px-4 py-4 text-right">
@@ -424,11 +404,10 @@ export default function UserDashboard() {
               <button
                 key={g.id}
                 onClick={() => setSearchParams({ tab: "guides", topic: g.id })}
-                className={`py-3 px-3 text-xs font-bold border rounded-lg text-center transition ${
-                  topic === g.id
+                className={`py-3 px-3 text-xs font-bold border rounded-lg text-center transition ${topic === g.id
                     ? "border-red-500 bg-red-50/50 text-red-700 font-semibold"
                     : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 {g.title}
               </button>
@@ -445,23 +424,23 @@ export default function UserDashboard() {
             />
           </div>
         ) : (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="relative h-56 md:h-72 bg-gray-100">
-            <img
-              src={selectedGuide.image}
-              alt={selectedGuide.imageAlt}
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-5">
-              <p className="text-xs font-bold uppercase tracking-wide text-white/80">First aid guide</p>
-              <h3 className="text-2xl font-bold text-white leading-tight">{selectedGuide.title}</h3>
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="relative h-56 md:h-72 bg-gray-100">
+              <img
+                src={selectedGuide.image}
+                alt={selectedGuide.imageAlt}
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-white/80">First aid guide</p>
+                <h3 className="text-2xl font-bold text-white leading-tight">{selectedGuide.title}</h3>
+              </div>
+            </div>
+            <div className={fullPage ? "p-6" : "p-4"}>
+              {getGuideContent()}
             </div>
           </div>
-          <div className={fullPage ? "p-6" : "p-4"}>
-          {getGuideContent()}
-          </div>
-        </div>
         )}
       </div>
     )
@@ -663,7 +642,7 @@ export default function UserDashboard() {
               {/* Dispatch Progress Tracker */}
               <div className="flex-1 bg-[#fafafa] p-5 overflow-y-auto space-y-4">
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Live Dispatch Status</h3>
-                
+
                 <div className="relative pl-6 space-y-6 border-l border-gray-200 ml-2">
                   {/* Step 1: Received */}
                   <div className="relative">
@@ -762,11 +741,10 @@ export default function UserDashboard() {
   // Determine active tab class for the top switch buttons
   const getTabButtonClass = (tabName) => {
     const isActive = (tabName === "report" && isReporting) || activeTab === tabName
-    return `flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${
-      isActive
+    return `flex-1 py-3 text-center text-xs font-bold border-b-2 transition-all cursor-pointer ${isActive
         ? "border-red-600 text-red-600 font-bold"
         : "border-transparent text-gray-500 hover:text-gray-700"
-    }`
+      }`
   }
 
   if (activeTab === "guides") {
