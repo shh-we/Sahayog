@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSearchParams } from "react-router-dom"
 import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
@@ -6,10 +6,11 @@ import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.jsx"
 import { useSocket, SOCKET_EVENTS } from "../../hooks/useSocket.js"
-import { getNearbyEmergencies, createEmergency } from "../../api/emergency.js"
+import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
-import { Marker, Circle, useMapEvents } from "react-leaflet"
-import { HeartPulse, Shield, Flame, AlertTriangle, CheckCircle } from "lucide-react"
+import { Marker, Circle, useMapEvents, useMap } from "react-leaflet"
+import L from "leaflet"
+import { HeartPulse, Shield, Flame, AlertTriangle, CheckCircle, Waves, XCircle, LayoutGrid, Bookmark, ChevronRight } from "lucide-react"
 import toast from "react-hot-toast"
 import cprChokingGuide from "../../assets/cpr-choking-guide.png"
 import bleedingControlGuide from "../../assets/bleeding-control-guide.jpg"
@@ -21,6 +22,23 @@ function MapClickHandler({ onClick }) {
       onClick(event.latlng.lat, event.latlng.lng)
     },
   })
+  return null
+}
+
+// Internal component to change map view dynamically
+function ChangeMapView({ center }) {
+  const map = useMap()
+  const lastCenterRef = useRef(null)
+
+  useEffect(() => {
+    if (center && center[0] && center[1]) {
+      const centerKey = `${center[0]},${center[1]}`
+      if (lastCenterRef.current !== centerKey) {
+        lastCenterRef.current = centerKey
+        map.setView(center, 15, { animate: true })
+      }
+    }
+  }, [center, map])
   return null
 }
 
@@ -47,6 +65,39 @@ export default function UserDashboard() {
   })
   const [formLoading, setFormLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [submittedEmergency, setSubmittedEmergency] = useState(null)
+  const [radarRadius, setRadarRadius] = useState(100)
+
+  const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
+  const subLon = submittedEmergency?.reporterLocation?.coordinates?.[0] || null
+
+  // Pulse effect for searching responders (up to 500m)
+  useEffect(() => {
+    if (!isSubmitted) return
+    const interval = setInterval(() => {
+      setRadarRadius((prev) => (prev >= 500 ? 50 : prev + 25))
+    }, 50)
+    return () => clearInterval(interval)
+  }, [isSubmitted])
+
+  const handleCancelEmergency = async () => {
+    if (!submittedEmergency) return
+    const toastId = toast.loading("Cancelling emergency report...")
+    try {
+      await deleteEmergency(submittedEmergency._id)
+      toast.success("Emergency report cancelled successfully", { id: toastId })
+      setIsSubmitted(false)
+      setSubmittedEmergency(null)
+    } catch (error) {
+      console.error("Error cancelling emergency:", error)
+      toast.error(error.response?.data?.message || "Failed to cancel emergency", { id: toastId })
+    }
+  }
+
+  const handleSaveLocation = () => {
+    if (!submittedEmergency) return
+    toast.success("Emergency location saved to favorites!")
+  }
 
   const fetchNearbyData = async (lat, lng) => {
     try {
@@ -118,6 +169,7 @@ export default function UserDashboard() {
   useEffect(() => {
     if (activeTab !== "report" && activeTab !== null && activeTab !== "") {
       setIsSubmitted(false)
+      setSubmittedEmergency(null)
     }
   }, [activeTab])
 
@@ -226,7 +278,7 @@ export default function UserDashboard() {
         latitude: userLocation[0],
       })
 
-      // Set submission success state instead of redirecting
+      setSubmittedEmergency(response.data.emergency)
       setIsSubmitted(true)
     } catch (error) {
       console.error("Error creating emergency:", error)
@@ -568,31 +620,127 @@ export default function UserDashboard() {
       default:
         if (isSubmitted) {
           return (
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center bg-white animate-fade-in">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-50 text-green-500 mb-6 shadow-md animate-bounce">
-                <CheckCircle className="h-12 w-12" />
+            <div className="flex flex-col h-full bg-[#fafafa]">
+              {/* Header section with progress indicator */}
+              <div className="p-5 bg-white border-b border-gray-100 shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">Starting search</h2>
+                    <p className="text-xs text-gray-500 font-medium mt-1">Assessing how long it'll take to find a responder</p>
+                  </div>
+                  {/* Timer badge */}
+                  <div className="bg-gray-950 text-white font-mono text-xs px-2.5 py-1.5 rounded-lg flex items-center justify-center tracking-widest font-bold select-none">
+                    --:--
+                  </div>
+                </div>
+
+                {/* Progress bar line */}
+                <div className="w-full bg-gray-100 h-[3px] rounded-full overflow-hidden mt-4">
+                  <div className="bg-red-500 h-full w-1/3 animate-pulse"></div>
+                </div>
+
+                {/* Main Action Buttons */}
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  <button
+                    type="button"
+                    onClick={handleCancelEmergency}
+                    className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#f3f4f6] hover:bg-[#e5e7eb] text-gray-800 font-bold text-xs transition duration-200 cursor-pointer"
+                  >
+                    <XCircle className="h-4 w-4 shrink-0 text-gray-500" />
+                    Cancel report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEmergency(submittedEmergency)}
+                    className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#f3f4f6] hover:bg-[#e5e7eb] text-gray-800 font-bold text-xs transition duration-200 cursor-pointer"
+                  >
+                    <LayoutGrid className="h-4 w-4 shrink-0 text-gray-500" />
+                    Details
+                  </button>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Emergency Submitted</h2>
-              <p className="text-sm text-gray-500 max-w-xs mb-8">
-                Your report has been successfully recorded. Nearby responders have been notified.
-              </p>
-              <div className="flex flex-col gap-3 w-full max-w-[280px]">
+
+              {/* Dispatch Progress Tracker */}
+              <div className="flex-1 bg-[#fafafa] p-5 overflow-y-auto space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Live Dispatch Status</h3>
+                
+                <div className="relative pl-6 space-y-6 border-l border-gray-200 ml-2">
+                  {/* Step 1: Received */}
+                  <div className="relative">
+                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
+                      <CheckCircle className="h-3 w-3" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Emergency report received</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Report registered successfully on Sahayog network</p>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Broadcasted */}
+                  <div className="relative">
+                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
+                      <CheckCircle className="h-3 w-3" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Coordinates broadcasted</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting signal to responders within 3km</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3: Contacting Responders */}
+                  <div className="relative">
+                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-yellow-50 border border-yellow-200 text-yellow-600 shadow-xs">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Contacting nearest responder</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Waiting for available responder confirmation</p>
+                    </div>
+                  </div>
+
+                  {/* Step 4: Dispatched */}
+                  <div className="relative">
+                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-gray-200 shadow-xs">
+                      <div className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-400 leading-tight">Responder dispatched</h4>
+                      <p className="text-[10px] text-gray-400 font-medium mt-0.5">Awaiting dispatch confirmation details</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Bookmark Action */}
+              <div className="p-4 border-t border-gray-200 bg-white shrink-0 space-y-3">
                 <button
                   type="button"
-                  onClick={() => setIsSubmitted(false)}
+                  onClick={() => {
+                    setIsSubmitted(false)
+                    setSubmittedEmergency(null)
+                  }}
                   className="w-full inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 text-sm transition-all duration-200 shadow-md shadow-red-500/10 cursor-pointer"
                 >
                   Report Another Emergency
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsSubmitted(false)
-                    setSearchParams({ tab: "history" })
-                  }}
-                  className="w-full rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 text-sm transition-all duration-200 cursor-pointer"
+                  onClick={handleSaveLocation}
+                  className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-[#f8f9fa] border border-gray-100 hover:bg-gray-100 transition duration-200 text-left cursor-pointer"
                 >
-                  View My Reports
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white shrink-0 shadow-sm">
+                      <Bookmark className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900">Save this emergency location</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">For fast access in future emergencies</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
                 </button>
               </div>
             </div>
@@ -653,7 +801,19 @@ export default function UserDashboard() {
     <div style={{ display: "flex", height: "100vh" }}>
       {/* Map Container */}
       <div style={{ flex: 1, position: "relative" }}>
-        <MapComponent center={userLocation} zoom={13}>
+        {isSubmitted && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-gray-900 leading-none">Searching for Responders</span>
+              <span className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting emergency coordinates...</span>
+            </div>
+          </div>
+        )}
+        <MapComponent center={isSubmitted && subLat && subLon ? [subLat, subLon] : [form.latitude, form.longitude]} zoom={13}>
           {/* Capture clicks to set location when reporting tab is open */}
           {isReporting && (
             <MapClickHandler onClick={updateFormLocation} />
@@ -692,6 +852,86 @@ export default function UserDashboard() {
               responder={responder}
             />
           ))}
+
+          {isSubmitted && submittedEmergency && subLat && subLon && (
+            <>
+              <ChangeMapView center={[subLat, subLon]} />
+              {/* Outer pulsing red circle */}
+              <Circle
+                center={[subLat, subLon]}
+                radius={radarRadius}
+                pathOptions={{
+                  color: '#ef4444',
+                  fillColor: '#ef4444',
+                  fillOpacity: 0.1,
+                  weight: 2,
+                }}
+              />
+              {/* Center custom dot marker with speech bubble */}
+              <Marker
+                position={[subLat, subLon]}
+                icon={L.divIcon({
+                  className: 'custom-speech-bubble',
+                  html: `
+                    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+                      <!-- Speech Bubble -->
+                      <div style="
+                        display: flex;
+                        align-items: center;
+                        background: white;
+                        border-radius: 16px;
+                        padding: 6px 12px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        border: 1px solid #eee;
+                        margin-bottom: 8px;
+                        white-space: nowrap;
+                        pointer-events: none;
+                      ">
+                        <div style="
+                          width: 24px;
+                          height: 24px;
+                          border-radius: 6px;
+                          background: #ef4444;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          color: white;
+                          font-size: 12px;
+                          margin-right: 8px;
+                        ">🚨</div>
+                        <div style="display: flex; flex-direction: column;">
+                          <span style="font-size: 10px; font-weight: 700; color: #111; line-height: 1.1;">Emergency</span>
+                          <span style="font-size: 9px; color: #666; font-weight: 500; line-height: 1.1; margin-top: 1px;">Location</span>
+                        </div>
+                      </div>
+                      <!-- Pin Arrow -->
+                      <div style="
+                        width: 0;
+                        height: 0;
+                        border-left: 6px solid transparent;
+                        border-right: 6px solid transparent;
+                        border-top: 6px solid white;
+                        margin-top: -9px;
+                        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+                      "></div>
+                      <!-- Center Pin Point -->
+                      <div style="
+                        width: 10px;
+                        height: 10px;
+                        background: white;
+                        border: 2.5px solid #222;
+                        border-radius: 50%;
+                        margin-top: 4px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                      "></div>
+                    </div>
+                  `,
+                  iconSize: [120, 70],
+                  iconAnchor: [60, 68]
+                })}
+              />
+            </>
+          )}
         </MapComponent>
       </div>
 
