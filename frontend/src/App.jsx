@@ -52,17 +52,18 @@ function App() {
               <UserDashboard />
             </ProtectedRoute>
           } />
-          <Route path={RESPONDER_DASHBOARD} element={
-            <ProtectedRoute roles={["responder"]}>
-              <ResponderDashboard />
-            </ProtectedRoute>
-          } />
           <Route path={ADMIN_DASHBOARD} element={
             <ProtectedRoute roles={["admin"]}>
               <AdminDashboard />
             </ProtectedRoute>
           } />
         </Route>
+
+        <Route path={RESPONDER_DASHBOARD} element={
+          <ProtectedRoute roles={["responder"]}>
+            <ResponderDashboard />
+          </ProtectedRoute>
+        } />
       </Routes>
     </>
   )
