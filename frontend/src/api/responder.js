@@ -11,7 +11,7 @@ export const updateResponseStatus = (id, status) =>
  
 // GET /api/responders/my-assignments
 // returns emergencies this responder has accepted (assigned or in_progress)
-export const getMyAssignments = () => api.get("/responders/my-assignments");
+export const getMyAssignments = (history = false) => api.get(`/responders/my-assignments${history ? "?history=true" : ""}`);
 
 // PUT /api/responders/availability
 // Toggle responder availability (online/offline)
