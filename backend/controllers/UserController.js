@@ -1,4 +1,6 @@
 import User from "../models/User.js";
+import Emergency from "../models/Emergency.js";
+import { publishResponderLocation } from "../socket/emergencyPublisher.js";
 import { getIO } from "../socket/index.js";
 
 // @desc    Get logged in user profile
@@ -201,14 +203,20 @@ export async function updateLocation(req, res) {
       { new: true }
     ).select("-password");
 
-    // Emit Socket.IO event for location update
-    const io = getIO();
-    io.emit("location_update", {
-      responderId: req.user.id,
-      responderName: user.name,
-      latitude: latitude,
-      longitude: longitude
+    // Find active assignment and publish location to emergency room
+    const activeEmergency = await Emergency.findOne({
+      assignedResponder: req.user.id,
+      status: { $in: ["assigned", "in_progress"] }
     });
+
+    if (activeEmergency) {
+      publishResponderLocation(activeEmergency._id.toString(), {
+        emergencyId: activeEmergency._id.toString(),
+        responderId: req.user.id.toString(),
+        coordinates: [longitude, latitude],
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.status(200).json({
       success: true,

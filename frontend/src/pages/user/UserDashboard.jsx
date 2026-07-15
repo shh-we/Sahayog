@@ -73,6 +73,14 @@ export default function UserDashboard() {
   const [dispatchedAt, setDispatchedAt] = useState(null)
   const [elapsedTime, setElapsedTime] = useState(0)
 
+  const [liveResponderLocation, setLiveResponderLocation] = useState(null)
+  const currentEmergencyRef = useRef(null)
+  currentEmergencyRef.current = submittedEmergency || selectedEmergency
+
+  useEffect(() => {
+    setLiveResponderLocation(null)
+  }, [submittedEmergency?._id])
+
   const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
   const subLon = submittedEmergency?.reporterLocation?.coordinates?.[0] || null
 
@@ -192,7 +200,7 @@ export default function UserDashboard() {
 
   // Socket.IO real-time updates
   const socket = useSocketInstance()
-  useEmergencyRoom(selectedEmergency?._id || null)
+  useEmergencyRoom(submittedEmergency?._id || selectedEmergency?._id || null)
 
   useEffect(() => {
     if (!socket || !user?.id) return
@@ -222,9 +230,29 @@ export default function UserDashboard() {
       )
     })
 
+    // responder:location — live coordinate update of assigned responder
+    socket.on(SOCKET_EVENTS.RESPONDER_LOCATION, (data) => {
+      console.log("[UserDashboard] Received responder location update:", data)
+      const currentEmergency = currentEmergencyRef.current
+      if (!currentEmergency) return
+
+      const assignedResponderId = currentEmergency.assignedResponder?._id || currentEmergency.assignedResponder
+      if (!assignedResponderId) return
+
+      const matchesEmergency =
+        String(data.emergencyId) === String(currentEmergency._id);
+      const matchesResponder =
+        String(data.responderId) === String(assignedResponderId);
+
+      if (matchesEmergency && matchesResponder && Array.isArray(data.coordinates) && data.coordinates.length === 2) {
+        setLiveResponderLocation([data.coordinates[1], data.coordinates[0]])
+      }
+    })
+
     return () => {
       socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
       socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
+      socket.off(SOCKET_EVENTS.RESPONDER_LOCATION)
     }
   }, [socket, user?.id])
 
@@ -899,9 +927,9 @@ export default function UserDashboard() {
     const elapsedMin = String(Math.floor(elapsedTime / 60)).padStart(2, "0")
     const elapsedSec = String(elapsedTime % 60).padStart(2, "0")
 
-    // Simulate responder moving closer/nearby
-    const responderLat = subLat ? subLat + 0.004 : userLocation[0] + 0.004
-    const responderLon = subLon ? subLon + 0.003 : userLocation[1] + 0.003
+    // Use live responder location if available; otherwise use the initial simulated fallback
+    const responderLat = liveResponderLocation ? liveResponderLocation[0] : (subLat ? subLat + 0.004 : userLocation[0] + 0.004)
+    const responderLon = liveResponderLocation ? liveResponderLocation[1] : (subLon ? subLon + 0.003 : userLocation[1] + 0.003)
     const myLat = subLat || userLocation[0]
     const myLon = subLon || userLocation[1]
     const mapCenter = [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
