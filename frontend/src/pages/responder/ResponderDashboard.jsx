@@ -4,7 +4,7 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import EmergencyForm from "../../components/emergency/EmergencyForm.jsx"
 import StatusUpdateForm from "../../components/responder/StatusUpdateForm.jsx"
-import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
+import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies } from "../../api/emergency.js"
 import { toggleAvailability, updateLocation, getMyAssignments, acceptEmergency } from "../../api/responder.js"
@@ -75,6 +75,7 @@ export default function ResponderDashboard() {
     socket.on(SOCKET_EVENTS.DISPATCH_OFFER, (offer) => {
       // TODO (Feature dispatch modal): show offer modal with offer.attemptId,
       // offer.emergencyType, offer.etaSeconds, offer.expiresAt
+      console.log("[ResponderDashboard] Received dispatch offer:", offer)
     })
 
     // Received via the emergency room joined by useEmergencyRoom above.

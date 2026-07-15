@@ -1,18 +1,9 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import io from "socket.io-client"
 import useAuthStore from "../stores/authStore.js"
+import { SocketContext } from "./socketContext.js"
 
 const SOCKET_URL = "http://localhost:5000"
-
-const SocketContext = createContext(null)
-
-// Exact server-to-client event names from backend/socket/events.js
-export const SOCKET_EVENTS = {
-  DISPATCH_OFFER: "dispatch:offer",
-  RESPONDER_ASSIGNED: "responder:assigned",
-  RESPONDER_LOCATION: "responder:location",
-  EMERGENCY_STATUS_UPDATE: "emergency:statusUpdate"
-}
 
 export function SocketProvider({ children }) {
   const user = useAuthStore((state) => state.user)
@@ -23,12 +14,6 @@ export function SocketProvider({ children }) {
   useEffect(() => {
     // 1. Gate connection creation until loading is false and user is logged in
     if (loading || !user) {
-      if (socketRef.current) {
-        console.log("[SocketProvider] Logging out or unauthenticated, disconnecting socket...")
-        socketRef.current.disconnect()
-        socketRef.current = null
-        setSocket(null)
-      }
       return
     }
 
@@ -49,6 +34,7 @@ export function SocketProvider({ children }) {
     })
 
     socketRef.current = newSocket
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSocket(newSocket)
 
     newSocket.on("connect", () => {
@@ -81,6 +67,4 @@ export function SocketProvider({ children }) {
   )
 }
 
-export function useSocketInstance() {
-  return useContext(SocketContext)
-}
+

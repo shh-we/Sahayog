@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useSocketInstance } from "../sockets/SocketProvider.jsx"
+import { useSocketInstance } from "../sockets/socketContext.js"
 
 export function useEmergencyRoom(emergencyId) {
   const socket = useSocketInstance()
