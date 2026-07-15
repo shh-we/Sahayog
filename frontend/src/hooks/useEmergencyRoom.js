@@ -3,13 +3,17 @@ import { useSocketInstance } from "../sockets/SocketProvider.jsx"
 
 export function useEmergencyRoom(emergencyId) {
   const socket = useSocketInstance()
-  const [joined, setJoined] = useState(false)
-  const [error, setError] = useState(null)
+  // Keep the result tied to the room that produced it. This lets the values
+  // reset naturally when the selected emergency changes, without setting
+  // state synchronously from the effect body.
+  const [roomState, setRoomState] = useState({
+    emergencyId: null,
+    joined: false,
+    error: null
+  })
 
   useEffect(() => {
     if (!socket || !emergencyId) {
-      setJoined(false)
-      setError(null)
       return
     }
 
@@ -20,12 +24,14 @@ export function useEmergencyRoom(emergencyId) {
         if (!isMounted) return
 
         if (response && response.ok) {
-          setJoined(true)
-          setError(null)
+          setRoomState({ emergencyId, joined: true, error: null })
           console.log(`[useEmergencyRoom] Joined room emergency:${emergencyId}`)
         } else {
-          setJoined(false)
-          setError(response?.code || "FORBIDDEN")
+          setRoomState({
+            emergencyId,
+            joined: false,
+            error: response?.code || "FORBIDDEN"
+          })
           console.warn(`[useEmergencyRoom] Failed to join room emergency:${emergencyId}`)
         }
       })
@@ -53,5 +59,8 @@ export function useEmergencyRoom(emergencyId) {
     }
   }, [socket, emergencyId])
 
-  return { joined, error }
+  return {
+    joined: roomState.emergencyId === emergencyId && roomState.joined,
+    error: roomState.emergencyId === emergencyId ? roomState.error : null
+  }
 }
