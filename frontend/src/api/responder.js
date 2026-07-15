@@ -26,3 +26,11 @@ export const getNearbyResponders = (params) =>
 // data: { rating, comment } — only emergency creator can submit
 export const submitFeedback = (id, data) =>
   api.post(`/responders/emergencies/${id}/feedback`, data);
+
+// POST /api/dispatch/:attemptId/accept
+export const acceptDispatchAttempt = (attemptId) =>
+  api.post(`/dispatch/${attemptId}/accept`);
+
+// POST /api/dispatch/:attemptId/decline
+export const declineDispatchAttempt = (attemptId) =>
+  api.post(`/dispatch/${attemptId}/decline`);
