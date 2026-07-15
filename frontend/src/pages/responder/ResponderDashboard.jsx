@@ -2,8 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import logo from "../../assets/logo.svg"
 import useAuthStore from "../../stores/authStore.js"
-import MapComponent from "../../components/map/MapComponent.jsx"
-import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
+
 import EmergencyForm from "../../components/emergency/EmergencyForm.jsx"
 import StatusUpdateForm from "../../components/responder/StatusUpdateForm.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.jsx"
@@ -23,7 +22,10 @@ import {
   Activity,
   CheckCircle,
   CheckCircle2,
-  Compass
+  ShieldCheck,
+  Mail,
+  Phone,
+  Calendar
 } from "lucide-react"
 
 export default function ResponderDashboard() {
@@ -257,30 +259,21 @@ export default function ResponderDashboard() {
           </Link>
         </div>
 
-        {/* Responder profile card */}
-        <div className="p-4 border-b border-gray-100 flex flex-col items-center text-center shrink-0">
-          <div className="w-14 h-14 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-lg mb-2 shadow-sm select-none">
-            TB
-          </div>
-          <p className="text-sm font-semibold text-gray-900 leading-tight">
-            Paramedic Team Bravo
-          </p>
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">
-            Kathmandu Zone 4
-          </p>
-          
-          {/* Availability Status & Toggle */}
-          <div className="flex items-center gap-2 mt-3 justify-center w-full">
-            <span className={`w-2 h-2 rounded-full ${isAvailable ? "bg-green-500" : "bg-gray-300"}`} />
-            <span className="text-xs font-medium text-gray-600">
-              {isAvailable ? "Available" : "Offline"}
-            </span>
+        {/* Responder availability toggle */}
+        <div className="p-3 border-b border-gray-100 shrink-0">
+          <div className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isAvailable ? "bg-green-500" : "bg-gray-300"}`} />
+              <span className="text-sm font-medium text-gray-700">
+                {isAvailable ? "Available" : "Offline"}
+              </span>
+            </div>
             <button
               onClick={handleToggleAvailability}
-              className={`w-8 h-4.5 rounded-full transition-colors relative focus:outline-none shrink-0 ${isAvailable ? 'bg-green-500' : 'bg-gray-200'}`}
+              className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none shrink-0 ${isAvailable ? 'bg-green-500' : 'bg-gray-200'}`}
               aria-label="Toggle availability"
             >
-              <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-transform shadow-sm ${isAvailable ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform shadow-sm ${isAvailable ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
           </div>
         </div>
@@ -338,14 +331,38 @@ export default function ResponderDashboard() {
           </nav>
         </div>
 
-        {/* Sticky Logout Button */}
-        <div className="p-3 border-t border-gray-100 shrink-0">
+        {/* Sticky Bottom Section */}
+        <div className="p-3 border-t border-gray-100 flex flex-col gap-2 shrink-0">
+          {/* Logout */}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-xl text-red-600 hover:bg-red-50 transition-all cursor-pointer w-full text-left"
+            className="flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200 cursor-pointer w-full text-left"
+            title="Logout"
           >
             <LogOut size={18} className="shrink-0" />
             <span>Logout</span>
+          </button>
+
+          {/* User Profile */}
+          <button
+            onClick={() => {
+              setActiveTab("profile")
+              setIsMobileOpen(false)
+            }}
+            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer w-full text-left"
+            title="Duty Profile"
+          >
+            <div className="w-10 h-10 rounded-full bg-white border border-gray-200 text-gray-600 font-bold flex items-center justify-center text-sm shrink-0 select-none shadow-sm uppercase">
+              {user?.name ? user.name.substring(0, 2) : "RP"}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-sm font-semibold text-gray-900 truncate leading-none mb-1">
+                {user?.name || "Responder Team"}
+              </p>
+              <p className="text-xs text-gray-500 truncate leading-none capitalize">
+                {user?.department || user?.role || "Active Responder"}
+              </p>
+            </div>
           </button>
         </div>
       </aside>
@@ -353,131 +370,53 @@ export default function ResponderDashboard() {
       {/* Main content container */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 md:pt-0 pt-14">
         {activeTab === "alerts" && (
-          <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
-            {/* Map Container */}
-            <div className="flex-1 h-[50vh] md:h-full relative border-b md:border-b-0 md:border-r border-gray-200">
-              <MapComponent center={responderLocation} zoom={13}>
-                {nearbyEmergencies.map(emergency => (
-                  <EmergencyMarker
-                    key={emergency._id}
-                    emergency={emergency}
-                    onClick={setSelectedEmergency}
-                  />
-                ))}
-              </MapComponent>
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {/* Page heading */}
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 bg-white shrink-0">
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Active Alerts</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                {isAvailable ? "On-duty · Awaiting dispatches" : "Off-duty · Not receiving dispatches"}
+              </p>
             </div>
 
-            {/* Sidebar Panels (Right Side) - 320px wide */}
-            <div className="w-full md:w-[320px] bg-white flex flex-col h-[50vh] md:h-full shrink-0 overflow-y-auto p-4 space-y-4">
-              {/* Report Emergency Button */}
-              <button
-                type="button"
-                onClick={() => setShowEmergencyForm(true)}
-                className="w-full py-2.5 px-4 bg-red-650 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] cursor-pointer"
-              >
-                <AlertCircle size={16} />
-                Report Emergency
-              </button>
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+              <div className="max-w-2xl mx-auto space-y-4">
 
-              {/* Active Assignments Card */}
-              <div className="border border-gray-200 rounded-xl bg-white p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3.5 flex items-center gap-2">
-                  <Activity size={14} className="text-amber-500 shrink-0" />
-                  Active Assignments ({assignments.length})
-                </h3>
-                {assignments.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400 text-sm">
-                    No active assignments
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {assignments.map(a => (
-                      <div
-                        key={a._id}
-                        className="p-3 border border-gray-100 rounded-xl bg-slate-50/70 hover:bg-slate-100 transition-all"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            a.type === 'fire' ? 'bg-red-50 text-red-600' :
-                            a.type === 'medical' ? 'bg-blue-50 text-blue-600' :
-                            a.type === 'security' ? 'bg-purple-50 text-purple-600' :
-                            'bg-gray-100 text-gray-605'
-                          }`}>
-                            {a.type}
-                          </span>
-                          <span className="text-xs text-amber-650 font-bold uppercase shrink-0">{a.status}</span>
-                        </div>
-                        <p className="text-sm font-semibold text-gray-800 mt-2.5 line-clamp-2">{a.description}</p>
-                        {a.address && (
-                          <p className="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
-                            <MapPin size={12} className="shrink-0" />
-                            <span className="truncate">{a.address}</span>
-                          </p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedAssignment(a)
-                            setShowStatusForm(true)
-                          }}
-                          className="w-full py-2 px-3 mt-3.5 bg-blue-650 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          Update Status
-                        </button>
+                {/* ── Monitoring status card (always visible) ── */}
+                <div className="border border-gray-200 rounded-2xl bg-white p-8 flex flex-col items-center text-center shadow-sm">
+                  {/* Icon */}
+                  <div className={`w-14 h-14 rounded-full border flex items-center justify-center mb-4 ${
+                    isAvailable ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'
+                  }`}>
+                    {isAvailable ? (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[#BDF3CF]">
+                        <div className="w-4 h-4 rounded-full bg-[#35C96B]" />
                       </div>
-                    ))}
+                    ) : (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-200">
+                        <div className="w-4 h-4 rounded-full bg-gray-400" />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Nearby Emergencies Card */}
-              <div className="border border-gray-200 rounded-xl bg-white p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3.5 flex items-center gap-2">
-                  <Compass size={14} className="text-blue-500 shrink-0" />
-                  Nearby Emergencies ({nearbyEmergencies.length})
-                </h3>
-                {nearbyEmergencies.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400 text-sm">
-                    No emergencies nearby
+                  {/* Status label */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${isAvailable ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                    <span className={`text-sm font-semibold tracking-wide ${isAvailable ? 'text-green-700' : 'text-gray-500'}`}>
+                      {isAvailable ? "Monitoring Network: Standing By" : "System Offline: Not Receiving Dispatches"}
+                    </span>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {nearbyEmergencies.map(e => (
-                      <div
-                        key={e._id}
-                        className={`p-3 border rounded-xl transition-all ${
-                          selectedEmergency?._id === e._id ? 'border-blue-500 bg-blue-50/20' : 'border-gray-100 bg-white hover:bg-slate-50/50'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start gap-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            e.type === 'fire' ? 'bg-red-50 text-red-600' :
-                            e.type === 'medical' ? 'bg-blue-50 text-blue-600' :
-                            e.type === 'security' ? 'bg-purple-50 text-purple-600' :
-                            'bg-gray-100 text-gray-605'
-                          }`}>
-                            {e.type}
-                          </span>
-                          <button
-                            onClick={() => setSelectedEmergency(e)}
-                            className="text-xs text-blue-600 hover:underline font-semibold shrink-0"
-                          >
-                            Details
-                          </button>
-                        </div>
-                        <p className="text-sm font-semibold text-gray-800 mt-2.5 line-clamp-2">{e.description}</p>
-                        <button
-                          type="button"
-                          onClick={() => handleAcceptEmergency(e._id)}
-                          disabled={acceptingId === e._id}
-                          className="w-full py-2 px-3 mt-3.5 bg-green-605 hover:bg-green-700 disabled:bg-gray-200 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center"
-                        >
-                          {acceptingId === e._id ? "Accepting..." : "Accept"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
+                  <p className="text-sm text-gray-500 leading-relaxed max-w-sm">
+                    {isAvailable 
+                      ? "All systems online. You'll be notified the instant a dispatch is assigned to your unit — no action needed while you wait."
+                      : "You are currently off-duty. Toggle your availability in the sidebar to start receiving emergency dispatches."}
+                  </p>
+                </div>
+
+
+
               </div>
             </div>
           </div>
@@ -554,86 +493,108 @@ export default function ResponderDashboard() {
 
         {/* Duty Profile Tab */}
         {activeTab === "profile" && (
-          <div className="flex-1 p-6 overflow-y-auto max-w-2xl mx-auto w-full">
-            <div className="border-b border-gray-200 pb-4 mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Duty Profile</h1>
-              <p className="text-sm text-gray-500 mt-1">Manage your active responder duty status and credentials.</p>
-            </div>
+          <div className="flex-1 flex flex-col overflow-y-auto bg-gray-50/50">
+            <div className="max-w-3xl mx-auto w-full p-4 md:p-6 space-y-4 md:space-y-6">
 
-            <div className="space-y-4">
-              {/* Identity Card */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xl shadow-inner select-none shrink-0">
-                  TB
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Paramedic Team Bravo</h2>
-                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                    <MapPin size={14} className="text-gray-300 shrink-0" />
-                    Kathmandu Zone 4
-                  </p>
-                  <span className="mt-2.5 inline-flex items-center px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                    {user?.role || "Responder"}
-                  </span>
+              {/* Top Header Card */}
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm relative">
+                {/* Gradient cover */}
+                <div className="h-32 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+
+                {/* Profile info section */}
+                <div className="px-6 pb-6 relative flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                  {/* Avatar */}
+                  <div className="w-24 h-24 rounded-2xl bg-blue-600 text-white border-4 border-white flex items-center justify-center text-4xl font-bold shadow-sm -mt-12 shrink-0 uppercase">
+                    {user?.name ? user.name.charAt(0) : 'N'}
+                  </div>
+
+                  {/* Text Info */}
+                  <div className="pt-2 text-center sm:text-left w-full">
+                    <h2 className="text-2xl font-bold text-gray-900 capitalize">{user?.name || "nayan"}</h2>
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mt-1.5 text-xs text-gray-500 font-medium">
+                      <span className="inline-flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase font-bold tracking-wide">
+                        <ShieldCheck size={12} strokeWidth={2.5} />
+                        {user?.role || "USER"}
+                      </span>
+                      <span>•</span>
+                      <span>Joined N/A</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Availability Status Card */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Availability Status</h3>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${isAvailable ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-                    <span className="text-sm font-semibold text-gray-800">{isAvailable ? 'Available for Dispatch' : 'Duty Offline'}</span>
-                  </div>
+              {/* Stats Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Card 1: Reports Filed */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 text-center shadow-sm">
+                  <h3 className="text-3xl font-extrabold text-gray-900">{historyAssignments.length || 23}</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1.5">Reports Filed</p>
+                </div>
+
+                {/* Card 2: Days Active */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 text-center shadow-sm">
+                  <h3 className="text-3xl font-extrabold text-gray-900">0</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1.5">Days Active</p>
+                </div>
+
+                {/* Card 3: Status */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 text-center shadow-sm flex flex-col items-center justify-center h-full">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
+                    Status: {isAvailable ? 'Active' : 'Offline'}
+                  </p>
                   <button
                     onClick={handleToggleAvailability}
-                    className={`w-9 h-5 rounded-full transition-colors relative focus:outline-none ${isAvailable ? 'bg-green-500' : 'bg-gray-200'}`}
+                    className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none ${isAvailable ? 'bg-green-500' : 'bg-gray-200'}`}
                     aria-label="Toggle availability state"
                   >
-                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform shadow-sm ${isAvailable ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform shadow-sm ${isAvailable ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  {isAvailable 
-                    ? "You are visible to the matching algorithm and can receive real-time emergency dispatch offers." 
-                    : "Turn on availability to receive nearby emergency offers."}
-                </p>
               </div>
 
-              {/* Skills Card */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Emergency Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(user?.skills && user.skills.length > 0 ? user.skills : ["Medical Response", "CPR Certification", "Trauma Care"]).map((skill, idx) => (
-                    <span 
-                      key={idx} 
-                      className="px-2.5 py-1 bg-slate-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 capitalize"
-                    >
-                      {skill}
-                    </span>
-                  ))}
+              {/* Contact Information */}
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100">
+                  <h3 className="text-base font-bold text-gray-900">Contact Information</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Your account details</p>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {/* Email Row */}
+                  <div className="p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+                      <Mail size={22} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Email Address</p>
+                      <p className="text-sm font-semibold text-gray-900 mt-1">{user?.email || "nayan1@gmail.com"}</p>
+                    </div>
+                  </div>
+
+                  {/* Phone Row */}
+                  <div className="p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-green-50 text-green-500 flex items-center justify-center shrink-0">
+                      <Phone size={22} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone Number</p>
+                      <p className="text-sm font-semibold text-gray-900 mt-1">{user?.phone || "1111111111"}</p>
+                    </div>
+                  </div>
+
+                  {/* Member Since Row */}
+                  <div className="p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center shrink-0">
+                      <Calendar size={22} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Member Since</p>
+                      <p className="text-sm font-semibold text-gray-900 mt-1">N/A</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Geolocation Watcher Info */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Active Location Sharing</h3>
-                <div className="flex items-center gap-3 text-sm text-gray-705 bg-slate-50 border border-gray-200 rounded-xl p-3.5">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
-                    <Compass size={16} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-xs">Current Coordinates</p>
-                    <p className="text-xs text-gray-405 mt-0.5">
-                      Lat: <span className="font-mono">{responderLocation[0].toFixed(5)}</span>, Lng: <span className="font-mono">{responderLocation[1].toFixed(5)}</span>
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Your coordinates are shared with reporters when you are actively en route to an assignment.
-                </p>
-              </div>
             </div>
           </div>
         )}
