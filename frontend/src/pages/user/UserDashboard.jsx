@@ -9,12 +9,14 @@ import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/SocketProvider.j
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
-import { Marker, Circle, useMapEvents, useMap } from "react-leaflet"
+import { Marker, Circle, useMapEvents, useMap, Polyline } from "react-leaflet"
 import L from "leaflet"
-import { HeartPulse, Shield, Flame, AlertTriangle, CheckCircle, Waves, XCircle, LayoutGrid, Bookmark, ChevronRight } from "lucide-react"
+import { HeartPulse, Shield, Flame, AlertTriangle, CheckCircle, Waves, XCircle, LayoutGrid, Bookmark, ChevronRight, Mail, Phone, Calendar, Clock, MapPin, ShieldCheck, MessageSquare, PhoneCall } from "lucide-react"
 import toast from "react-hot-toast"
-import cprChokingGuide from "../../assets/cpr-choking-guide.png"
+import cprGuide from "../../assets/cpr-guide.png"
+import chokingGuide from "../../assets/choking-guide.png"
 import bleedingControlGuide from "../../assets/bleeding-control-guide.jpg"
+import fracturesBurnsGuide from "../../assets/fractures-burns-guide.png"
 
 // Internal component to capture map clicks and update coordinates
 function MapClickHandler({ onClick }) {
@@ -68,6 +70,8 @@ export default function UserDashboard() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [submittedEmergency, setSubmittedEmergency] = useState(null)
   const [radarRadius, setRadarRadius] = useState(100)
+  const [dispatchedAt, setDispatchedAt] = useState(null)
+  const [elapsedTime, setElapsedTime] = useState(0)
 
   const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
   const subLon = submittedEmergency?.reporterLocation?.coordinates?.[0] || null
@@ -174,6 +178,18 @@ export default function UserDashboard() {
     }
   }, [activeTab])
 
+  // Elapsed time timer for dispatched emergency view
+  const dispatchedStatus = submittedEmergency?.status || "pending"
+  const showDispatchedView = isSubmitted && ["assigned", "en_route", "on_scene", "resolved"].includes(dispatchedStatus)
+
+  useEffect(() => {
+    if (!showDispatchedView || !dispatchedAt) return
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - dispatchedAt) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [showDispatchedView, dispatchedAt])
+
   // Socket.IO real-time updates
   const socket = useSocketInstance()
   useEmergencyRoom(selectedEmergency?._id || null)
@@ -187,12 +203,22 @@ export default function UserDashboard() {
       setEmergencies(prev =>
         prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
       )
+      // Also update submittedEmergency if it matches
+      setSubmittedEmergency(prev =>
+        prev && prev._id === data.emergencyId ? { ...prev, status: "assigned", assignedResponder: data.responderId } : prev
+      )
+      // Record dispatch time
+      setDispatchedAt(Date.now())
     })
 
     // emergency:statusUpdate — status changed (en_route / on_scene / resolved).
     socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
       setEmergencies(prev =>
         prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
+      )
+      // Also update submittedEmergency if it matches
+      setSubmittedEmergency(prev =>
+        prev && prev._id === data.emergencyId ? { ...prev, status: data.status } : prev
       )
     })
 
@@ -331,15 +357,22 @@ export default function UserDashboard() {
   }
 
   const renderGuides = ({ fullPage = false } = {}) => {
-    const topic = searchParams.get("topic") || "cpr"
+    const topic = searchParams.get("topic") || null
 
     const guideTopics = [
       {
         id: "cpr",
-        title: "CPR & Choking",
+        title: "CPR",
         icon: HeartPulse,
-        image: cprChokingGuide,
-        imageAlt: "Emergency first aid guide for CPR and choking",
+        image: cprGuide,
+        imageAlt: "Step-by-step CPR first aid guide",
+      },
+      {
+        id: "choking",
+        title: "Choking",
+        icon: AlertTriangle,
+        image: chokingGuide,
+        imageAlt: "Choking and Heimlich maneuver first aid guide",
       },
       {
         id: "bleeding",
@@ -352,40 +385,11 @@ export default function UserDashboard() {
         id: "fractures",
         title: "Fractures & Burns",
         icon: Flame,
-        image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1200&q=80",
-        imageAlt: "Emergency medical care in progress",
+        image: fracturesBurnsGuide,
+        imageAlt: "First aid guide for fractures and burns",
       },
     ]
-    const selectedGuide = guideTopics.find((g) => g.id === topic) || guideTopics[0]
-
-    const getGuideContent = () => {
-      switch (topic) {
-        case "cpr":
-          return null
-        case "bleeding":
-          return null
-        case "fractures":
-          return (
-            <div className="space-y-3">
-              <h4 className="font-bold text-sm text-red-700">Fractures & Burns Care:</h4>
-              <p className="font-semibold text-[11px] text-gray-800">Fractures:</p>
-              <ul className="list-disc pl-4 text-xs text-gray-600 space-y-1">
-                <li>Do not try to realign the bone.</li>
-                <li>Support and splint the limb in the position found.</li>
-                <li>Apply ice to reduce swelling.</li>
-              </ul>
-              <p className="font-semibold text-[11px] text-gray-800 mt-2">Burns:</p>
-              <ul className="list-disc pl-4 text-xs text-gray-600 space-y-1">
-                <li>Cool the burn under cool running water for 10-20 mins.</li>
-                <li>Do not apply butter, oil, or ice to the burn.</li>
-                <li>Cover loosely with sterile, non-stick dressing.</li>
-              </ul>
-            </div>
-          )
-        default:
-          return null
-      }
-    }
+    const selectedGuide = topic ? guideTopics.find((g) => g.id === topic) : null
 
     return (
       <div className={`${fullPage ? "max-w-5xl mx-auto p-6 md:p-8" : "p-4"} space-y-4`}>
@@ -398,48 +402,34 @@ export default function UserDashboard() {
           </p>
         </div>
 
-        {!fullPage && (
-          <div className="grid grid-cols-3 gap-2">
-            {guideTopics.map((g) => (
+        {/* Topic selection grid — always visible */}
+        <div className={`grid ${fullPage ? "grid-cols-2 gap-4" : "grid-cols-4 gap-2"}`}>
+          {guideTopics.map((g) => {
+            const Icon = g.icon
+            return (
               <button
                 key={g.id}
                 onClick={() => setSearchParams({ tab: "guides", topic: g.id })}
-                className={`py-3 px-3 text-xs font-bold border rounded-lg text-center transition ${topic === g.id
+                className={`${fullPage ? "flex items-center gap-4 p-5" : "py-3 px-2"} text-xs font-bold border rounded-xl text-center transition cursor-pointer ${topic === g.id
                     ? "border-red-500 bg-red-50/50 text-red-700 font-semibold"
-                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300"
                   }`}
               >
-                {g.title}
+                {fullPage && <Icon className="h-6 w-6 shrink-0" />}
+                <span className={fullPage ? "text-sm font-bold" : ""}>{g.title}</span>
               </button>
-            ))}
-          </div>
-        )}
+            )
+          })}
+        </div>
 
-        {["cpr", "bleeding"].includes(selectedGuide.id) ? (
+        {/* Guide image — only shown after user clicks a topic */}
+        {selectedGuide && (
           <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <img
               src={selectedGuide.image}
               alt={selectedGuide.imageAlt}
               className="w-full h-auto"
             />
-          </div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="relative h-56 md:h-72 bg-gray-100">
-              <img
-                src={selectedGuide.image}
-                alt={selectedGuide.imageAlt}
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-5">
-                <p className="text-xs font-bold uppercase tracking-wide text-white/80">First aid guide</p>
-                <h3 className="text-2xl font-bold text-white leading-tight">{selectedGuide.title}</h3>
-              </div>
-            </div>
-            <div className={fullPage ? "p-6" : "p-4"}>
-              {getGuideContent()}
-            </div>
           </div>
         )}
       </div>
@@ -486,40 +476,127 @@ export default function UserDashboard() {
   }
 
   const renderProfile = () => {
+    const userEmergencies = emergencies
+      .filter((e) => e.reporterId === user?.id || e.reporterId?._id === user?.id)
+      .filter((e, index, list) => list.findIndex((item) => item._id === e._id) === index)
+
+    const memberSince = user?.createdAt
+      ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      : "N/A"
+
+    const daysSinceJoined = user?.createdAt
+      ? Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+      : 0
+
     return (
-      <div className="p-4 space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 leading-tight">My Profile</h2>
-          <p className="text-xs text-gray-500">Manage account information</p>
-        </div>
+      <div className="min-h-full bg-gray-50">
+        <div className="max-w-3xl mx-auto p-6 md:p-8 space-y-6">
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-              {user?.name?.charAt(0).toUpperCase()}
+          {/* Hero Card */}
+          <div className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
+            {/* Gradient Banner */}
+            <div className="h-32 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 rounded-t-2xl relative">
+              <div className="absolute inset-0 rounded-t-2xl bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImEiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHBhdGggZD0iTTAgMGgyMHYyMEgweiIgZmlsbD0ibm9uZSIvPjxjaXJjbGUgY3g9IjEwIiBjeT0iMTAiIHI9IjEuNSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA4KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNhKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-60" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-gray-900 leading-none mb-1">{user?.name}</h3>
-              <p className="text-[10px] text-gray-500 capitalize leading-none">{user?.role}</p>
+
+            {/* Profile info below banner */}
+            <div className="px-6 pb-6 pt-4 flex flex-col sm:flex-row items-center sm:items-center gap-4 relative">
+              {/* Avatar — pulled up to overlap banner */}
+              <div className="h-20 w-20 rounded-2xl bg-white p-1 shadow-lg -mt-14 shrink-0">
+                <div className="h-full w-full rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl select-none">
+                  {user?.name?.charAt(0).toUpperCase()}
+                </div>
+              </div>
+              <div className="text-center sm:text-left flex-1">
+                <h2 className="text-xl font-bold text-gray-900 leading-tight">{user?.name}</h2>
+                <div className="flex items-center justify-center sm:justify-start gap-2 mt-1.5">
+                  <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide">
+                    <ShieldCheck className="h-3 w-3" />
+                    {user?.role}
+                  </span>
+                  <span className="text-[11px] text-gray-400 font-semibold">•</span>
+                  <span className="text-[11px] text-gray-500 font-semibold">Joined {memberSince}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-gray-100 pt-3 space-y-2">
-            <div>
-              <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider">Email</span>
-              <span className="text-xs text-gray-800 font-semibold">{user?.email}</span>
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
+              <p className="text-2xl font-extrabold text-gray-900">{userEmergencies.length}</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Reports Filed</p>
             </div>
-            <div>
-              <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider">Phone Number</span>
-              <span className="text-xs text-gray-800 font-semibold">{user?.phone || "N/A"}</span>
+            <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
+              <p className="text-2xl font-extrabold text-gray-900">{daysSinceJoined}</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Days Active</p>
             </div>
-            <div>
-              <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider">Member Since</span>
-              <span className="text-xs text-gray-800 font-semibold">
-                {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}
-              </span>
+            <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
+              <div className="flex items-center justify-center">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
+              </div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-2">Status: Active</p>
             </div>
           </div>
+
+          {/* Contact Information */}
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900">Contact Information</h3>
+              <p className="text-[11px] text-gray-400 font-medium mt-0.5">Your account details</p>
+            </div>
+
+            <div className="divide-y divide-gray-100">
+              {/* Email */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Email Address</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.email}</p>
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                  <Phone className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone Number</p>
+                  <p className="text-sm font-semibold text-gray-900">{user?.phone || "Not provided"}</p>
+                </div>
+              </div>
+
+              {/* Member Since */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Member Since</p>
+                  <p className="text-sm font-semibold text-gray-900">{memberSince}</p>
+                </div>
+              </div>
+
+              {/* Last Updated */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Last Updated</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {user?.updatedAt
+                      ? new Date(user.updatedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                      : "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     )
@@ -598,14 +675,31 @@ export default function UserDashboard() {
       case "report":
       default:
         if (isSubmitted) {
+          const emergencyStatus = submittedEmergency?.status || "pending"
+          const isDispatched = ["assigned", "en_route", "on_scene", "resolved"].includes(emergencyStatus)
+          const isOnScene = ["on_scene", "resolved"].includes(emergencyStatus)
+
+          // Progress bar width based on status
+          const progressWidth = isOnScene ? "w-full" : isDispatched ? "w-3/4" : "w-1/3"
+          const headerText = isOnScene
+            ? "Responder on scene"
+            : isDispatched
+              ? "Responder dispatched"
+              : "Starting search"
+          const headerSub = isOnScene
+            ? "A responder has arrived at your location"
+            : isDispatched
+              ? "A responder is on the way to your location"
+              : "Assessing how long it'll take to find a responder"
+
           return (
             <div className="flex flex-col h-full bg-[#fafafa]">
               {/* Header section with progress indicator */}
               <div className="p-5 bg-white border-b border-gray-100 shrink-0">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">Starting search</h2>
-                    <p className="text-xs text-gray-500 font-medium mt-1">Assessing how long it'll take to find a responder</p>
+                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">{headerText}</h2>
+                    <p className="text-xs text-gray-500 font-medium mt-1">{headerSub}</p>
                   </div>
                   {/* Timer badge */}
                   <div className="bg-gray-950 text-white font-mono text-xs px-2.5 py-1.5 rounded-lg flex items-center justify-center tracking-widest font-bold select-none">
@@ -615,7 +709,7 @@ export default function UserDashboard() {
 
                 {/* Progress bar line */}
                 <div className="w-full bg-gray-100 h-[3px] rounded-full overflow-hidden mt-4">
-                  <div className="bg-red-500 h-full w-1/3 animate-pulse"></div>
+                  <div className={`${isDispatched ? "bg-green-500" : "bg-red-500"} h-full ${progressWidth} transition-all duration-700 ${isDispatched ? "" : "animate-pulse"}`}></div>
                 </div>
 
                 {/* Main Action Buttons */}
@@ -644,7 +738,7 @@ export default function UserDashboard() {
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Live Dispatch Status</h3>
 
                 <div className="relative pl-6 space-y-6 border-l border-gray-200 ml-2">
-                  {/* Step 1: Received */}
+                  {/* Step 1: Received — always complete */}
                   <div className="relative">
                     <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
                       <CheckCircle className="h-3 w-3" />
@@ -655,7 +749,7 @@ export default function UserDashboard() {
                     </div>
                   </div>
 
-                  {/* Step 2: Broadcasted */}
+                  {/* Step 2: Broadcasted — always complete */}
                   <div className="relative">
                     <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
                       <CheckCircle className="h-3 w-3" />
@@ -666,28 +760,44 @@ export default function UserDashboard() {
                     </div>
                   </div>
 
-                  {/* Step 3: Contacting Responders */}
+                  {/* Step 3: Contacting Responders — in-progress when pending, complete when dispatched */}
                   <div className="relative">
-                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-yellow-50 border border-yellow-200 text-yellow-600 shadow-xs">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-                      </span>
-                    </div>
+                    {isDispatched ? (
+                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
+                        <CheckCircle className="h-3 w-3" />
+                      </div>
+                    ) : (
+                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-yellow-50 border border-yellow-200 text-yellow-600 shadow-xs">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                        </span>
+                      </div>
+                    )}
                     <div>
-                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Contacting nearest responder</h4>
-                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Waiting for available responder confirmation</p>
+                      <h4 className={`text-xs font-bold leading-tight ${isDispatched ? "text-gray-900" : "text-gray-900"}`}>Contacting nearest responder</h4>
+                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">
+                        {isDispatched ? "Responder confirmed and accepted the assignment" : "Waiting for available responder confirmation"}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Step 4: Dispatched */}
+                  {/* Step 4: Dispatched — pending when searching, complete when assigned */}
                   <div className="relative">
-                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-gray-200 shadow-xs">
-                      <div className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                    </div>
+                    {isDispatched ? (
+                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
+                        <CheckCircle className="h-3 w-3" />
+                      </div>
+                    ) : (
+                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-gray-200 shadow-xs">
+                        <div className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                      </div>
+                    )}
                     <div>
-                      <h4 className="text-xs font-semibold text-gray-400 leading-tight">Responder dispatched</h4>
-                      <p className="text-[10px] text-gray-400 font-medium mt-0.5">Awaiting dispatch confirmation details</p>
+                      <h4 className={`text-xs leading-tight ${isDispatched ? "font-bold text-gray-900" : "font-semibold text-gray-400"}`}>Responder dispatched</h4>
+                      <p className={`text-[10px] mt-0.5 ${isDispatched ? "text-gray-500 font-semibold" : "text-gray-400 font-medium"}`}>
+                        {isDispatched ? "Responder is en route to your location" : "Awaiting dispatch confirmation details"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -771,14 +881,297 @@ export default function UserDashboard() {
     )
   }
 
+  if (activeTab === "profile") {
+    return renderProfile()
+  }
+
+  // --- Dispatched full-page "Help is on the way" view ---
+
+  if (showDispatchedView) {
+    const incidentId = `INC-${submittedEmergency?._id?.slice(-4).toUpperCase() || "0000"}`
+    const emergencyType = submittedEmergency?.type || "general"
+    const reportedTime = submittedEmergency?.createdAt
+      ? new Date(submittedEmergency.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+        " - " +
+        new Date(submittedEmergency.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "N/A"
+    const isOnScene = ["on_scene", "resolved"].includes(dispatchedStatus)
+    const elapsedMin = String(Math.floor(elapsedTime / 60)).padStart(2, "0")
+    const elapsedSec = String(elapsedTime % 60).padStart(2, "0")
+
+    // Simulate responder moving closer/nearby
+    const responderLat = subLat ? subLat + 0.004 : userLocation[0] + 0.004
+    const responderLon = subLon ? subLon + 0.003 : userLocation[1] + 0.003
+    const myLat = subLat || userLocation[0]
+    const myLon = subLon || userLocation[1]
+    const mapCenter = [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
+
+    return (
+      <div style={{ display: "flex", height: "100vh", background: "#f8f9fb", overflow: "hidden" }}>
+        {/* Left Panel */}
+        <div style={{ width: "420px", minWidth: "320px", maxWidth: "100vw", display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb", background: "#fff", overflowY: "auto", flexShrink: 0 }}>
+
+          {/* Active Emergency Solid Red Card */}
+          <div style={{ margin: "20px 20px 0", background: "#cb2525", borderRadius: "16px", padding: "20px", color: "#fff", boxShadow: "0 4px 20px rgba(203, 37, 37, 0.15)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255, 255, 255, 0.9)" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", display: "inline-block", animation: "pulse 2s infinite" }} />
+                Active Emergency
+              </span>
+              <span style={{ fontSize: "10px", fontWeight: 800, color: "rgba(255, 255, 255, 0.7)", background: "rgba(255, 255, 255, 0.15)", padding: "3px 8px", borderRadius: "6px", letterSpacing: "0.5px" }}>{incidentId}</span>
+            </div>
+            
+            <h2 style={{ fontSize: "24px", fontWeight: 900, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.5px" }}>Help is on the way</h2>
+            <p style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.8)", margin: "0 0 24px", lineHeight: 1.5, fontWeight: 500 }}>
+              Stay where you are and keep your phone nearby. Response team can see your live location.
+            </p>
+
+            {/* Premium 3-step progress bar */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", padding: "0 10px" }}>
+              {/* Connector Line Background */}
+              <div style={{ position: "absolute", top: "9px", left: "20px", right: "20px", height: "2px", backgroundColor: "rgba(255, 255, 255, 0.25)", zIndex: 1 }} />
+              {/* Active Connector Line */}
+              <div style={{ position: "absolute", top: "9px", left: "20px", width: isOnScene ? "calc(100% - 40px)" : "calc(50% - 20px)", height: "2px", backgroundColor: "#fff", zIndex: 2 }} />
+
+              {/* Step 1: Reported */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "4px solid #cb2525", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />
+                </div>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: "#fff", marginTop: "6px" }}>Reported</span>
+              </div>
+
+              {/* Step 2: Responder Dispatched */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "3px solid #cb2525", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 4px rgba(255, 255, 255, 0.25)" }}>
+                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />
+                </div>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: "#fff", marginTop: "6px" }}>Responder Dispatched</span>
+              </div>
+
+              {/* Step 3: On Scene */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: isOnScene ? "#fff" : "rgba(255, 255, 255, 0.45)", border: isOnScene ? "4px solid #cb2525" : "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {isOnScene && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />}
+                </div>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: isOnScene ? "#fff" : "rgba(255, 255, 255, 0.6)", marginTop: "6px" }}>On Scene</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Estimated Arrival + Time Elapsed Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", padding: "20px" }}>
+            <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
+              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Estimated Arrival</p>
+              <p style={{ fontSize: "32px", fontWeight: 900, color: "#111827", margin: 0, lineHeight: 1 }}>
+                2 <span style={{ fontSize: "14px", fontWeight: 700, color: "#6b7280" }}>min</span>
+              </p>
+            </div>
+            <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
+              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Time Elapsed</p>
+              <p style={{ fontSize: "32px", fontWeight: 900, color: "#111827", margin: 0, lineHeight: 1, fontFamily: "monospace" }}>
+                {elapsedMin}:{elapsedSec}
+              </p>
+            </div>
+          </div>
+
+          {/* Assigned Responder Card */}
+          <div style={{ margin: "0 20px", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "20px", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
+            <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 16px" }}>Assigned Responder</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "46px", height: "46px", borderRadius: "12px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ShieldCheck style={{ width: "24px", height: "24px", color: "#2563eb" }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: "15px", fontWeight: 800, color: "#111827", margin: 0 }}>Paramedic Team Bravo</p>
+                  <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0", fontWeight: 600 }}>Ambulance - Unit AMB-07</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button 
+                  onClick={() => toast.success("Calling responder...")}
+                  style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
+                >
+                  <PhoneCall style={{ width: "16px", height: "16px" }} />
+                </button>
+                <button 
+                  onClick={() => toast.success("Opening chat...")}
+                  style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
+                >
+                  <MessageSquare style={{ width: "16px", height: "16px" }} />
+                </button>
+              </div>
+            </div>
+            
+            <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: "14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div>
+                <span style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>Status</span>
+                <p style={{ fontSize: "12px", fontWeight: 700, color: isOnScene ? "#16a34a" : "#16a34a", margin: "2px 0 0" }}>
+                  {isOnScene ? "On scene" : "On the way"}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>Type</span>
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "#111827", margin: "2px 0 0", textTransform: "capitalize" }}>Ambulance</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Incident Details Card */}
+          <div style={{ margin: "16px 20px", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "20px", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
+            <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 16px" }}>Incident Details</p>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Incident ID</span>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#111827" }}>{incidentId}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", alignItems: "center" }}>
+              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Type</span>
+              <span style={{ fontSize: "11px", fontWeight: 800, padding: "3px 12px", borderRadius: "99px", textTransform: "capitalize", background: "#fef2f2", color: "#dc2626", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#dc2626" }} />
+                {emergencyType}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Reported</span>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#111827" }}>{reportedTime}</span>
+            </div>
+          </div>
+
+          {/* Actions panel */}
+          <div style={{ padding: "0 20px 20px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
+            <button
+              type="button"
+              onClick={() => toast.success("Calling responder...")}
+              style={{ width: "100%", padding: "14px", borderRadius: "12px", background: "#2563eb", color: "#fff", fontSize: "14px", fontWeight: 800, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 2px 10px rgba(37, 99, 235, 0.15)" }}
+            >
+              <PhoneCall style={{ width: "16px", height: "16px" }} />
+              Call responder
+            </button>
+            <button
+              type="button"
+              onClick={() => toast.success("Location shared successfully!")}
+              style={{ width: "100%", padding: "12px", borderRadius: "12px", background: "#fff", color: "#4b5563", fontSize: "12px", fontWeight: 700, border: "1px solid #e5e7eb", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+            >
+              <MapPin style={{ width: "14px", height: "14px", color: "#6b7280" }} />
+              Share exact location
+            </button>
+          </div>
+        </div>
+
+        {/* Right Panel — Live Tracking Map */}
+        <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
+          {/* Map Header matching mock */}
+          <div style={{ padding: "18px 24px", background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
+            <div>
+              <h3 style={{ fontSize: "16px", fontWeight: 900, color: "#111827", margin: 0, letterSpacing: "-0.3px" }}>Live Tracking</h3>
+              <p style={{ fontSize: "12px", color: "#6b7280", margin: "2px 0 0", fontWeight: 500 }}>Updates every 10 seconds</p>
+            </div>
+            
+            {/* Header Right Connection Info & Avatar */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#16a34a" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a" }} />
+                Connected
+              </span>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#4b5563" }}>Location Enabled</span>
+              
+              {/* Small User Photo/Avatar */}
+              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#cbd5e1", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+                <span style={{ color: "#334155", fontWeight: 800, fontSize: "12px" }}>{user?.name?.charAt(0).toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Map Layout */}
+          <div style={{ flex: 1, position: "relative" }}>
+            <MapComponent center={mapCenter} zoom={14}>
+              <ChangeMapView center={mapCenter} />
+
+              {/* Dashed Polyline Connector between Responder and User */}
+              <Polyline
+                positions={[[responderLat, responderLon], [myLat, myLon]]}
+                color="#dc2626"
+                dashArray="6, 12"
+                weight={2.5}
+              />
+
+              {/* Responder Marker */}
+              <Marker
+                position={[responderLat, responderLon]}
+                icon={L.divIcon({
+                  className: "",
+                  html: `<div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="background:#111827;color:#fff;font-size:9px;font-weight:800;padding:4px 8px;border-radius:6px;white-space:nowrap;margin-bottom:6px;text-transform:uppercase;box-shadow:0 2px 5px rgba(0,0,0,0.15);letter-spacing:0.5px;">AMBULANCE - AMB-07</div>
+                    <div style="width:20px;height:20px;background:#2563eb;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-center:center;transform:rotate(-45deg);">
+                      <div style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid white; margin: auto;"></div>
+                    </div>
+                  </div>`,
+                  iconSize: [120, 50],
+                  iconAnchor: [60, 42],
+                })}
+              />
+
+              {/* User Location Target Marker */}
+              <Marker
+                position={[myLat, myLon]}
+                icon={L.divIcon({
+                  className: "",
+                  html: `<div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="background:#dc2626;color:#fff;font-size:9px;font-weight:800;padding:4px 8px;border-radius:6px;white-space:nowrap;margin-bottom:6px;box-shadow:0 2px 5px rgba(0,0,0,0.15);">YOU</div>
+                    <div style="position:relative;width:24px;height:24px;background:rgba(220,38,38,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                      <div style="width:12px;height:12px;background:#dc2626;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>
+                    </div>
+                  </div>`,
+                  iconSize: [60, 50],
+                  iconAnchor: [30, 44],
+                })}
+              />
+            </MapComponent>
+
+            {/* Live updates floating badge */}
+            <div style={{ position: "absolute", top: "20px", right: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "99px", padding: "6px 14px", display: "flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a", display: "inline-block", animation: "pulse 2s infinite" }} />
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#374151" }}>Live updates</span>
+            </div>
+
+            {/* Path ETA Tooltip */}
+            <div style={{ position: "absolute", top: "45%", left: "55%", transform: "translate(-50%, -50%)", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 15px rgba(0,0,0,0.08)" }}>
+              <Clock style={{ width: "16px", height: "16px", color: "#2563eb" }} />
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "12px", fontWeight: 800, color: "#111827", lineHeight: 1.1 }}>~2 min</span>
+                <span style={{ fontSize: "10px", color: "#6b7280", fontWeight: 600, marginTop: "1px" }}>0.4 km</span>
+              </div>
+            </div>
+
+            {/* Map Legend */}
+            <div style={{ position: "absolute", bottom: "20px", left: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", minWidth: "120px" }}>
+              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 8px" }}>Live Tracking</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#dc2626" }} />
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>You</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb" }} />
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>Responder</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return <div>Loading map...</div>
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       {/* Map Container */}
-      <div style={{ flex: 1, position: "relative" }}>
+      <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
         {isSubmitted && (
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
             <div className="relative flex h-3 w-3">
@@ -915,13 +1308,14 @@ export default function UserDashboard() {
 
       {/* Sidebar - Form Panel and Views */}
       <div style={{
-        width: "380px",
-        borderLeft: "1px solid #ccc",
+        width: "clamp(300px, 30vw, 420px)",
+        borderLeft: "1px solid #e5e7eb",
         display: "flex",
         flexDirection: "column",
         height: "100vh",
         overflowY: "hidden",
-        background: "#fafafa"
+        background: "#fafafa",
+        flexShrink: 0,
       }}>
         {/* Tab switch bar for main dashboard actions */}
         {(!activeTab || ["report", "alerts", "responders"].includes(activeTab)) && (
