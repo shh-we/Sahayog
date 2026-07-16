@@ -6,8 +6,9 @@ export const acceptEmergency = (id) =>
  
 // PUT /api/responders/emergencies/:id/status
 // data: { status } — en_route | on_scene | completed
-export const updateResponseStatus = (id, status) =>
-  api.put(`/responders/emergencies/${id}/status`, { status });
+// journeyData: { routeCoordinates, journeyStartedAt } — only when status = en_route
+export const updateResponseStatus = (id, status, journeyData = {}) =>
+  api.put(`/responders/emergencies/${id}/status`, { status, ...journeyData });
  
 // GET /api/responders/my-assignments
 // returns emergencies this responder has accepted (assigned or in_progress)

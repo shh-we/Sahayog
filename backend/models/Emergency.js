@@ -63,6 +63,16 @@ const emergencySchema = new mongoose.Schema({
     type: String,
     enum: ["en_route", "on_scene", "completed"],
     default: null
+  },
+
+  // Journey synchronization fields — populated when responder presses "Start Journey"
+  routeCoordinates: {
+    type: [[Number]], // array of [lat, lon] pairs
+    default: null
+  },
+  journeyStartedAt: {
+    type: Date,
+    default: null
   }
 
 }, { timestamps: true });

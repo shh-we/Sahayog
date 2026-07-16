@@ -11,5 +11,6 @@ export const SOCKET_EVENTS = {
   DISPATCH_OFFER: "dispatch:offer",
   RESPONDER_ASSIGNED: "responder:assigned",
   RESPONDER_LOCATION: "responder:location",
-  EMERGENCY_STATUS_UPDATE: "emergency:statusUpdate"
+  EMERGENCY_STATUS_UPDATE: "emergency:statusUpdate",
+  JOURNEY_STARTED: "journey:started"
 }

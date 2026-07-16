@@ -5,6 +5,7 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.jsx"
+import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
@@ -74,11 +75,20 @@ export default function UserDashboard() {
   const [elapsedTime, setElapsedTime] = useState(0)
 
   const [liveResponderLocation, setLiveResponderLocation] = useState(null)
+  const [syncRouteCoordinates, setSyncRouteCoordinates] = useState(null)
+  const [syncJourneyStartedAt, setSyncJourneyStartedAt] = useState(null)
   const currentEmergencyRef = useRef(null)
   currentEmergencyRef.current = submittedEmergency || selectedEmergency
 
   useEffect(() => {
     setLiveResponderLocation(null)
+    if (submittedEmergency) {
+      setSyncRouteCoordinates(submittedEmergency.routeCoordinates || null)
+      setSyncJourneyStartedAt(submittedEmergency.journeyStartedAt || null)
+    } else {
+      setSyncRouteCoordinates(null)
+      setSyncJourneyStartedAt(null)
+    }
   }, [submittedEmergency?._id])
 
   const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
@@ -208,12 +218,21 @@ export default function UserDashboard() {
     // Reporter receives these via the emergency room joined by useEmergencyRoom above.
     // responder:assigned — a responder was assigned to an emergency the user is watching.
     socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+      const assignedObj = {
+        _id: data.responderId,
+        name: data.responderName || "Rescue Team",
+        phone: data.responderPhone || "N/A",
+        email: data.responderEmail || "",
+        skills: data.responderSkills || [],
+        etaSeconds: data.etaSeconds || 300
+      };
+
       setEmergencies(prev =>
-        prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: assignedObj } : e)
       )
       // Also update submittedEmergency if it matches
       setSubmittedEmergency(prev =>
-        prev && prev._id === data.emergencyId ? { ...prev, status: "assigned", assignedResponder: data.responderId } : prev
+        prev && prev._id === data.emergencyId ? { ...prev, status: "assigned", assignedResponder: assignedObj } : prev
       )
       // Record dispatch time
       setDispatchedAt(Date.now())
@@ -221,12 +240,13 @@ export default function UserDashboard() {
 
     // emergency:statusUpdate — status changed (en_route / on_scene / resolved).
     socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
+      const nextStatus = data.status === "resolved" ? "resolved" : (data.responderStatus || data.status);
       setEmergencies(prev =>
-        prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: nextStatus } : e)
       )
       // Also update submittedEmergency if it matches
       setSubmittedEmergency(prev =>
-        prev && prev._id === data.emergencyId ? { ...prev, status: data.status } : prev
+        prev && prev._id === data.emergencyId ? { ...prev, status: nextStatus } : prev
       )
     })
 
@@ -246,6 +266,15 @@ export default function UserDashboard() {
 
       if (matchesEmergency && matchesResponder && Array.isArray(data.coordinates) && data.coordinates.length === 2) {
         setLiveResponderLocation([data.coordinates[1], data.coordinates[0]])
+      }
+    })
+
+    // journey:started — receive pre-calculated route and start timestamp for synchronized animation
+    socket.on(SOCKET_EVENTS.JOURNEY_STARTED, (data) => {
+      console.log("[UserDashboard] Received journey start:", data)
+      if (data.emergencyId === currentEmergencyRef.current?._id) {
+        setSyncRouteCoordinates(data.routeCoordinates)
+        setSyncJourneyStartedAt(data.journeyStartedAt)
       }
     })
 
@@ -916,6 +945,51 @@ export default function UserDashboard() {
   // --- Dispatched full-page "Help is on the way" view ---
 
   if (showDispatchedView) {
+    if (dispatchedStatus === "resolved") {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center font-sans">
+          <div className="bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xl max-w-md w-full space-y-6">
+            <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
+              <CheckCircle className="w-12 h-12" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Emergency Resolved</h2>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                The rescue team has successfully addressed the emergency and marked the status as resolved.
+              </p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-3.5 text-left text-sm text-slate-600">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-400">Incident ID</span>
+                <span className="font-bold text-slate-800">INC-{submittedEmergency?._id?.slice(-4).toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-400">Category</span>
+                <span className="font-bold text-slate-800 capitalize">{submittedEmergency?.type}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-400">Status</span>
+                <span className="font-bold text-green-600 flex items-center gap-1.5 bg-green-50 border border-green-200 px-3 py-1 rounded-full text-xs uppercase tracking-wide">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
+                  Resolved
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setIsSubmitted(false);
+                setSubmittedEmergency(null);
+                setSearchParams({ tab: "report" });
+              }}
+              className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-base font-bold transition-all shadow-md hover:shadow-lg cursor-pointer"
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const incidentId = `INC-${submittedEmergency?._id?.slice(-4).toUpperCase() || "0000"}`
     const emergencyType = submittedEmergency?.type || "general"
     const reportedTime = submittedEmergency?.createdAt
@@ -926,6 +1000,16 @@ export default function UserDashboard() {
     const isOnScene = ["on_scene", "resolved"].includes(dispatchedStatus)
     const elapsedMin = String(Math.floor(elapsedTime / 60)).padStart(2, "0")
     const elapsedSec = String(elapsedTime % 60).padStart(2, "0")
+
+    const responder = submittedEmergency?.assignedResponder
+    const responderName = typeof responder === "object" ? (responder?.name || "Rescue Team") : "Rescue Team"
+    const responderPhone = typeof responder === "object" ? (responder?.phone || "") : ""
+    const responderSkills = typeof responder === "object" ? (responder?.skills || []) : []
+    const responderSkillsFormatted = responderSkills.length > 0 
+      ? responderSkills.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(", ") 
+      : "Emergency Response"
+    const responderType = emergencyType.charAt(0).toUpperCase() + emergencyType.slice(1)
+    const etaMin = typeof responder === "object" && responder?.etaSeconds ? Math.max(1, Math.round(responder.etaSeconds / 60)) : 5
 
     // Use live responder location if available; otherwise use the initial simulated fallback
     const responderLat = liveResponderLocation ? liveResponderLocation[0] : (subLat ? subLat + 0.004 : userLocation[0] + 0.004)
@@ -992,7 +1076,7 @@ export default function UserDashboard() {
             <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
               <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Estimated Arrival</p>
               <p style={{ fontSize: "32px", fontWeight: 900, color: "#111827", margin: 0, lineHeight: 1 }}>
-                2 <span style={{ fontSize: "14px", fontWeight: 700, color: "#6b7280" }}>min</span>
+                {etaMin} <span style={{ fontSize: "14px", fontWeight: 700, color: "#6b7280" }}>min</span>
               </p>
             </div>
             <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
@@ -1012,19 +1096,25 @@ export default function UserDashboard() {
                   <ShieldCheck style={{ width: "24px", height: "24px", color: "#2563eb" }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: "15px", fontWeight: 800, color: "#111827", margin: 0 }}>Paramedic Team Bravo</p>
-                  <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0", fontWeight: 600 }}>Ambulance - Unit AMB-07</p>
+                  <p style={{ fontSize: "15px", fontWeight: 800, color: "#111827", margin: 0 }}>{responderName}</p>
+                  <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0", fontWeight: 600 }}>{responderSkillsFormatted}</p>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button 
-                  onClick={() => toast.success("Calling responder...")}
+                  onClick={() => {
+                    if (responderPhone) {
+                      window.location.href = `tel:${responderPhone}`;
+                    } else {
+                      toast.error("Phone number not available");
+                    }
+                  }}
                   style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
                 >
                   <PhoneCall style={{ width: "16px", height: "16px" }} />
                 </button>
                 <button 
-                  onClick={() => toast.success("Opening chat...")}
+                  onClick={() => toast.success(`Opening chat with ${responderName}...`)}
                   style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
                 >
                   <MessageSquare style={{ width: "16px", height: "16px" }} />
@@ -1041,7 +1131,7 @@ export default function UserDashboard() {
               </div>
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>Type</span>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: "#111827", margin: "2px 0 0", textTransform: "capitalize" }}>Ambulance</p>
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "#111827", margin: "2px 0 0", textTransform: "capitalize" }}>{responderType}</p>
               </div>
             </div>
           </div>
@@ -1070,7 +1160,13 @@ export default function UserDashboard() {
           <div style={{ padding: "0 20px 20px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
             <button
               type="button"
-              onClick={() => toast.success("Calling responder...")}
+              onClick={() => {
+                if (responderPhone) {
+                  window.location.href = `tel:${responderPhone}`;
+                } else {
+                  toast.error("Phone number not available");
+                }
+              }}
               style={{ width: "100%", padding: "14px", borderRadius: "12px", background: "#2563eb", color: "#fff", fontSize: "14px", fontWeight: 800, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 2px 10px rgba(37, 99, 235, 0.15)" }}
             >
               <PhoneCall style={{ width: "16px", height: "16px" }} />
@@ -1114,31 +1210,17 @@ export default function UserDashboard() {
           {/* Map Layout */}
           <div style={{ flex: 1, position: "relative" }}>
             <MapComponent center={mapCenter} zoom={14}>
-              <ChangeMapView center={mapCenter} />
 
-              {/* Dashed Polyline Connector between Responder and User */}
-              <Polyline
-                positions={[[responderLat, responderLon], [myLat, myLon]]}
-                color="#dc2626"
-                dashArray="6, 12"
-                weight={2.5}
-              />
-
-              {/* Responder Marker */}
-              <Marker
-                position={[responderLat, responderLon]}
-                icon={L.divIcon({
-                  className: "",
-                  html: `<div style="display:flex;flex-direction:column;align-items:center;">
-                    <div style="background:#111827;color:#fff;font-size:9px;font-weight:800;padding:4px 8px;border-radius:6px;white-space:nowrap;margin-bottom:6px;text-transform:uppercase;box-shadow:0 2px 5px rgba(0,0,0,0.15);letter-spacing:0.5px;">AMBULANCE - AMB-07</div>
-                    <div style="width:20px;height:20px;background:#2563eb;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-center:center;transform:rotate(-45deg);">
-                      <div style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid white; margin: auto;"></div>
-                    </div>
-                  </div>`,
-                  iconSize: [120, 50],
-                  iconAnchor: [60, 42],
-                })}
-              />
+              {/* Responder marker — hidden when animated route marker is active */}
+              {liveResponderLocation && dispatchedStatus !== "en_route" && (
+                <ResponderMarker
+                  responder={{
+                    location: { coordinates: [responderLon, responderLat] },
+                    name: "Responder",
+                    isAvailable: false
+                  }}
+                />
+              )}
 
               {/* User Location Target Marker */}
               <Marker
@@ -1146,31 +1228,55 @@ export default function UserDashboard() {
                 icon={L.divIcon({
                   className: "",
                   html: `<div style="display:flex;flex-direction:column;align-items:center;">
-                    <div style="background:#dc2626;color:#fff;font-size:9px;font-weight:800;padding:4px 8px;border-radius:6px;white-space:nowrap;margin-bottom:6px;box-shadow:0 2px 5px rgba(0,0,0,0.15);">YOU</div>
-                    <div style="position:relative;width:24px;height:24px;background:rgba(220,38,38,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;">
-                      <div style="width:12px;height:12px;background:#dc2626;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>
+                    <div style="background:#ef4444;color:#fff;font-size:10px;font-weight:800;padding:4px 8px;border-radius:99px;white-space:nowrap;margin-bottom:6px;box-shadow:0 2px 8px rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.2);text-transform:uppercase;letter-spacing:0.5px;">You</div>
+                    <div style="position:relative;width:28px;height:28px;background:rgba(239,68,68,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px rgba(239,68,68,0.1);">
+                      <div style="width:18px;height:18px;background:#ef4444;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:10px;height:10px;color:white;"><path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clip-rule="evenodd" /></svg>
+                      </div>
                     </div>
                   </div>`,
-                  iconSize: [60, 50],
-                  iconAnchor: [30, 44],
+                  iconSize: [60, 60],
+                  iconAnchor: [30, 48],
                 })}
               />
+
+              {/* Animated route layer — uses synchronized Mode B if route sync state exists */}
+              {liveResponderLocation && (
+                <ActiveRouteLayer
+                  responderCoords={[responderLat, responderLon]}
+                  emergencyCoords={[myLat, myLon]}
+                  syncRouteCoordinates={syncRouteCoordinates}
+                  syncJourneyStartedAt={syncJourneyStartedAt}
+                  isEnRoute={dispatchedStatus === "en_route"}
+                  renderMarker={dispatchedStatus === "en_route"}
+                  showRoute={dispatchedStatus === "en_route"}
+                  responderName="Responder"
+                  isAvailable={false}
+                />
+              )}
             </MapComponent>
 
-            {/* Live updates floating badge */}
-            <div style={{ position: "absolute", top: "20px", right: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "99px", padding: "6px 14px", display: "flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a", display: "inline-block", animation: "pulse 2s infinite" }} />
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#374151" }}>Live updates</span>
-            </div>
-
-            {/* Path ETA Tooltip */}
-            <div style={{ position: "absolute", top: "45%", left: "55%", transform: "translate(-50%, -50%)", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 15px rgba(0,0,0,0.08)" }}>
-              <Clock style={{ width: "16px", height: "16px", color: "#2563eb" }} />
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: "12px", fontWeight: 800, color: "#111827", lineHeight: 1.1 }}>~2 min</span>
-                <span style={{ fontSize: "10px", color: "#6b7280", fontWeight: 600, marginTop: "1px" }}>0.4 km</span>
+            {/* En-route overlay banner — mirrors Responder Dashboard */}
+            {dispatchedStatus === "en_route" ? (
+              <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[400] flex items-center justify-between shadow-xl animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                    <MapPin className="text-white w-5 h-5" />
+                  </div>
+                  <span className="font-extrabold text-sm tracking-wide">Responder is on the way</span>
+                </div>
+                <div className="text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg shadow-sm">
+                  Tracking live
+                </div>
               </div>
-            </div>
+            ) : dispatchedStatus === "on_scene" ? (
+              <div className="absolute top-4 left-4 right-4 bg-green-600/95 backdrop-blur-md text-white border border-green-500/30 p-4 rounded-xl z-[400] flex items-center gap-3 shadow-xl">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <CheckCircle className="text-white w-5 h-5" />
+                </div>
+                <span className="font-extrabold text-sm tracking-wide">Responder has arrived on scene</span>
+              </div>
+            ) : null}
 
             {/* Map Legend */}
             <div style={{ position: "absolute", bottom: "20px", left: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", minWidth: "120px" }}>

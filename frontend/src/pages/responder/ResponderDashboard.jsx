@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import logo from "../../assets/logo.svg"
 import useAuthStore from "../../stores/authStore.js"
@@ -6,6 +6,7 @@ import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
+import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getEmergencyById } from "../../api/emergency.js"
@@ -60,6 +61,9 @@ export default function ResponderDashboard() {
   const [loading, setLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  
+  // Throttled animated location for smooth visual updates on dashboard text overlays
+  const [throttledLocation, setThrottledLocation] = useState(null)
 
   // Dispatch Offer States
   const [currentOffer, setCurrentOffer] = useState(null)
@@ -262,6 +266,8 @@ export default function ResponderDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAssignment?.responderStatus, activeAssignment?._id])
 
+  // Animation and movement are now handled directly inside ActiveRouteLayer to keep UI smooth
+
   const handleToggleAvailability = async () => {
     try {
       const res = await toggleAvailability()
@@ -329,7 +335,38 @@ export default function ResponderDashboard() {
   const handleUpdateStatus = async (emergencyId, nextStatus) => {
     try {
       setIsSubmittingAction(true)
-      await updateResponseStatus(emergencyId, nextStatus)
+      let journeyData = {}
+      if (nextStatus === 'en_route') {
+        let routeCoords = []
+        try {
+          const [rLat, rLon] = responderLocation
+          const targetAssignment = assignments.find(a => a._id === emergencyId) || activeAssignment
+          const eCoords = targetAssignment?.reporterLocation?.coordinates
+          if (!eCoords || eCoords.length < 2) {
+            throw new Error("Target assignment coordinates not found")
+          }
+          const [eLon, eLat] = eCoords
+          const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${rLon},${rLat};${eLon},${eLat}?overview=full&geometries=geojson`)
+          const data = await response.json()
+          if (data.routes && data.routes.length > 0) {
+            routeCoords = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]])
+          } else {
+            routeCoords = [[rLat, rLon], [eLat, eLon]]
+          }
+        } catch (err) {
+          console.error("Failed to fetch route for sync:", err)
+          const targetAssignment = assignments.find(a => a._id === emergencyId) || activeAssignment
+          const eCoords = targetAssignment?.reporterLocation?.coordinates
+          const fallbackDest = eCoords ? [eCoords[1], eCoords[0]] : responderLocation
+          routeCoords = [responderLocation, fallbackDest]
+        }
+        journeyData = {
+          routeCoordinates: routeCoords,
+          journeyStartedAt: new Date().toISOString()
+        }
+      }
+
+      await updateResponseStatus(emergencyId, nextStatus, journeyData)
       toast.success(`Status updated to ${nextStatus.replace('_', ' ')}!`)
       await fetchActiveAssignments()
     } catch (err) {
@@ -446,11 +483,29 @@ export default function ResponderDashboard() {
     }
     const progressPercent = getProgressPercentage(statusVal)
 
+    const displayResponderLoc = (statusVal === "en_route" && throttledLocation) ? throttledLocation : responderLocation
+
     // Center coordinates
     const emergencyCoords = activeAssignment.reporterLocation?.coordinates
       ? [activeAssignment.reporterLocation.coordinates[1], activeAssignment.reporterLocation.coordinates[0]]
       : null
-    const mapCenter = emergencyCoords || responderLocation
+    const mapCenter = emergencyCoords || displayResponderLoc
+
+    const getDistanceKm = (loc1, loc2) => {
+      if (!loc1 || !loc2) return null
+      const [lat1, lon1] = loc1
+      const [lat2, lon2] = loc2
+      const R = 6371
+      const dLat = ((lat2 - lat1) * Math.PI) / 180
+      const dLon = ((lon2 - lon1) * Math.PI) / 180
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) ** 2
+      return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1)
+    }
+    const distKm = getDistanceKm(displayResponderLoc, emergencyCoords)
 
     return (
       <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
@@ -654,32 +709,69 @@ export default function ResponderDashboard() {
         </div>
 
         {/* Right Side: Map */}
-        <div className="w-full lg:w-1/2 h-[350px] lg:h-full relative bg-gray-100">
+        <div className="w-full lg:w-1/2 h-[350px] lg:h-full relative bg-gray-100 z-0">
           <MapComponent center={mapCenter} zoom={14}>
-            <ResponderMarker
-              responder={{
-                location: { coordinates: [responderLocation[1], responderLocation[0]] },
-                name: user?.name || "Me",
-                isAvailable: isAvailable
-              }}
-            />
+            {statusVal !== "en_route" && (
+              <ResponderMarker
+                responder={{
+                  location: { coordinates: [displayResponderLoc[1], displayResponderLoc[0]] },
+                  name: user?.name || "Me",
+                  isAvailable: isAvailable
+                }}
+              />
+            )}
             {emergencyCoords && (
               <EmergencyMarker
                 emergency={activeAssignment}
+                isTarget={statusVal === "en_route"}
               />
             )}
+            <ActiveRouteLayer 
+              responderCoords={responderLocation} 
+              emergencyCoords={emergencyCoords} 
+              isEnRoute={statusVal === "en_route"} 
+              renderMarker={true}
+              responderName={user?.name || "Me"}
+              isAvailable={isAvailable}
+              onArrival={(finalPos) => {
+                setResponderLocation(finalPos);
+                setThrottledLocation(null);
+                handleUpdateStatus(activeAssignment._id, 'on_scene');
+              }}
+              onProgress={(coords) => {
+                setThrottledLocation(coords);
+                // Sync simulated location to database so UserDashboard sees it too!
+                updateLocation({ latitude: coords[0], longitude: coords[1] }).catch(err =>
+                  console.error("Failed to sync simulated location:", err)
+                );
+              }}
+            />
           </MapComponent>
 
-          {/* Fallback Banner */}
-          <div className="absolute bottom-4 left-4 right-4 bg-black/80 backdrop-blur-md text-white border border-white/10 p-3 rounded-xl z-20 flex items-center justify-between text-xs shadow-lg">
-            <div className="flex items-center gap-2">
-              <Compass className="text-blue-400 w-4 h-4 animate-spin-slow" />
-              <span className="font-semibold">Road route temporarily unavailable</span>
+          {/* Map Overlays */}
+          {statusVal === "en_route" ? (
+            <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[400] flex items-center justify-between shadow-xl animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Navigation className="text-white w-5 h-5" />
+                </div>
+                <span className="font-extrabold text-sm tracking-wide">Responder is en route</span>
+              </div>
+              <div className="text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg shadow-sm">
+                {distKm} km • {etaText}
+              </div>
             </div>
-            <span className="text-[10px] text-white/50 bg-white/10 px-2 py-0.5 rounded font-mono">
-              DIRECT GPS LINE
-            </span>
-          </div>
+          ) : (
+            <div className="absolute bottom-4 left-4 right-4 bg-black/80 backdrop-blur-md text-white border border-white/10 p-3 rounded-xl z-[400] flex items-center justify-between text-xs shadow-lg">
+              <div className="flex items-center gap-2">
+                <Compass className="text-blue-400 w-4 h-4 animate-spin-slow" />
+                <span className="font-semibold">Road route temporarily unavailable</span>
+              </div>
+              <span className="text-[10px] text-white/50 bg-white/10 px-2 py-0.5 rounded font-mono">
+                DIRECT GPS LINE
+              </span>
+            </div>
+          )}
         </div>
       </div>
     )

@@ -1,7 +1,7 @@
 import Emergency from "../models/Emergency.js";
 import { getRequiredSkills } from "../services/emergencyService.js";
 import { startDispatch } from "../services/dispatchService.js";
-import { publishEmergencyStatusUpdate } from "../socket/emergencyPublisher.js";
+import { publishEmergencyStatusUpdate, publishJourneyStarted } from "../socket/emergencyPublisher.js";
 
 // @desc    Create new emergency
 // @route   POST /api/emergencies
@@ -127,6 +127,7 @@ export async function getEmergencies(req, res) {
     const [emergencies, total] = await Promise.all([
       Emergency.find(filter)
         .populate("reporterId", "name phone")
+        .populate("assignedResponder", "name phone skills email role")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(Number(limit)),
@@ -157,7 +158,8 @@ export async function getEmergencies(req, res) {
 export async function getEmergencyById(req, res) {
   try {
     const emergency = await Emergency.findById(req.params.id)
-      .populate("reporterId", "name phone");
+      .populate("reporterId", "name phone")
+      .populate("assignedResponder", "name phone skills email role");
 
     if (!emergency) {
       return res.status(404).json({
@@ -217,7 +219,8 @@ export async function getNearbyEmergencies(req, res) {
           $maxDistance: Number(radius)
         }
       }
-    }).populate("reporterId", "name phone");
+    }).populate("reporterId", "name phone")
+      .populate("assignedResponder", "name phone skills email role");
 
     res.status(200).json({
       success: true,
@@ -364,6 +367,15 @@ export async function updateResponderStatus(req, res) {
     // Persist the status in responderStatus
     emergency.responderStatus = status;
 
+    // When going en_route, store the shared journey state for user-side sync
+    if (status === "en_route") {
+      const { routeCoordinates, journeyStartedAt } = req.body;
+      if (routeCoordinates && Array.isArray(routeCoordinates)) {
+        emergency.routeCoordinates = routeCoordinates;
+      }
+      emergency.journeyStartedAt = journeyStartedAt ? new Date(journeyStartedAt) : new Date();
+    }
+
     // Special logic for completed status
     if (status === "completed") {
       emergency.status = "resolved";
@@ -372,12 +384,22 @@ export async function updateResponderStatus(req, res) {
 
     await emergency.save();
 
-    // Publish to the emergency's room
+    // Publish status update to the emergency's room
     publishEmergencyStatusUpdate(emergency._id.toString(), {
+      emergencyId: emergency._id.toString(),
       status: emergency.status,
       responderStatus: emergency.responderStatus,
       updatedAt: emergency.updatedAt
     });
+
+    // When en_route, also broadcast the journey state for synchronized animation
+    if (status === "en_route") {
+      publishJourneyStarted(emergency._id.toString(), {
+        emergencyId: emergency._id.toString(),
+        routeCoordinates: emergency.routeCoordinates,
+        journeyStartedAt: emergency.journeyStartedAt.toISOString()
+      });
+    }
 
     return res.status(200).json({
       success: true,

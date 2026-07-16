@@ -76,6 +76,10 @@ export async function acceptEmergency(req, res) {
     // Notify emergency room
     publishResponderAssigned(id.toString(), {
       responderId: responderId.toString(),
+      responderName: req.user.name,
+      responderPhone: req.user.phone,
+      responderEmail: req.user.email,
+      responderSkills: req.user.skills,
       emergencyId: id.toString(),
       etaSeconds: 300 // default ETA 5 minutes
     });
