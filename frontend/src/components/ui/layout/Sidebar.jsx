@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import useAuthStore from "../../../stores/authStore.js"
-import { HOME_ROUTE, USER_DASHBOARD, RESPONDER_DASHBOARD, ADMIN_DASHBOARD } from "../../../constants/routes.js"
+import { HOME_ROUTE, USER_DASHBOARD, RESPONDER_DASHBOARD, ADMIN_DASHBOARD, ADMIN_VERIFICATION_QUEUE, ADMIN_RESPONDERS_DIRECTORY } from "../../../constants/routes.js"
 import logo from "../../../assets/logo.svg"
 import {
   LayoutDashboard,
@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Menu,
   X,
+  UserCheck,
 } from "lucide-react"
 
 export default function Sidebar() {
@@ -119,38 +120,19 @@ export default function Sidebar() {
       case "admin":
         return [
           {
-            label: "Dashboard",
+            label: "Live Overview",
             path: ADMIN_DASHBOARD,
             icon: LayoutDashboard,
           },
           {
-            label: "Users",
-            path: `${ADMIN_DASHBOARD}?tab=users`,
+            label: "Verification Queue",
+            path: ADMIN_VERIFICATION_QUEUE,
+            icon: UserCheck,
+          },
+          {
+            label: "Responders Directory",
+            path: ADMIN_RESPONDERS_DIRECTORY,
             icon: Users,
-          },
-          {
-            label: "Responders",
-            path: `${ADMIN_DASHBOARD}?tab=responders`,
-            icon: Shield,
-          },
-          {
-            label: "All Emergencies",
-            path: `${ADMIN_DASHBOARD}?tab=emergencies`,
-            icon: AlertTriangle,
-            children: [
-              { label: "Active Cases", path: `${ADMIN_DASHBOARD}?tab=emergencies&filter=active` },
-              { label: "Resolved Cases", path: `${ADMIN_DASHBOARD}?tab=emergencies&filter=resolved` },
-            ],
-          },
-          {
-            label: "Analytics",
-            path: `${ADMIN_DASHBOARD}?tab=analytics`,
-            icon: BarChart3,
-          },
-          {
-            label: "My Profile",
-            path: `${ADMIN_DASHBOARD}?tab=profile`,
-            icon: User,
           },
         ]
       default:
@@ -182,6 +164,13 @@ export default function Sidebar() {
 
   const getLinkClass = (itemPath) => {
     const isActive = isLinkActive(itemPath)
+    if (user?.role === "admin") {
+      return `flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md transition-all duration-200 cursor-pointer w-full ${
+        isActive
+          ? "bg-gray-100 text-gray-800"
+          : "bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+      }`
+    }
     return `flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer w-full ${
       isActive
         ? "bg-gray-100 text-gray-900 font-semibold shadow-xs"
@@ -203,6 +192,8 @@ export default function Sidebar() {
     if (user?.role === "responder") return `${RESPONDER_DASHBOARD}?tab=profile`
     return `${USER_DASHBOARD}?tab=profile`
   }
+
+  const isAdmin = user?.role === "admin"
 
   return (
     <>
@@ -235,24 +226,24 @@ export default function Sidebar() {
         `}
       >
         {/* Logo Section */}
-        <div className="flex items-center gap-3 px-5 py-6 border-b border-gray-100 shrink-0">
-          <Link to={HOME_ROUTE} className="flex items-center gap-3">
-            <span className="h-9 w-10 overflow-hidden shrink-0 flex items-start justify-center">
+        <div className={`flex items-center shrink-0 ${isAdmin ? "px-4 pt-5 pb-3 justify-start" : "gap-3 px-5 py-6 border-b border-gray-100"}`}>
+          <Link to={HOME_ROUTE} className="flex items-center gap-2">
+            <span className={`overflow-hidden shrink-0 flex items-start justify-center ${isAdmin ? "h-6 w-7" : "h-9 w-10"}`}>
               <img
                 src={logo}
                 alt="Sahayog"
-                className="h-16 w-16 max-w-none object-contain -mt-1"
+                className={`max-w-none object-contain ${isAdmin ? "h-11 w-11 -mt-0.5" : "h-16 w-16 -mt-1"}`}
               />
             </span>
-            <span className="text-2xl font-bold text-[#1f73b7] leading-none">
+            <span className={`font-bold text-[#1f73b7] leading-none ${isAdmin ? "text-lg" : "text-2xl"}`}>
               Sahayog
             </span>
           </Link>
         </div>
 
         {/* Main Navigation (Scrollable) */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          <nav className="space-y-1">
+        <div className={`flex-1 overflow-y-auto ${isAdmin ? "px-2.5 py-3 space-y-0.5" : "px-3 py-4 space-y-1"}`}>
+          <nav className={isAdmin ? "space-y-0.5" : "space-y-1"}>
             {items.map((item) => {
               const Icon = item.icon
               const hasChildren = !!item.children
@@ -315,40 +306,42 @@ export default function Sidebar() {
         </div>
 
         {/* Sticky Bottom Section */}
-        <div className="p-3 border-t border-gray-100 flex flex-col gap-2 shrink-0">
-          {/* Logout */}
-          <button
-            onClick={() => {
-              logoutUser()
-              navigate(HOME_ROUTE)
-            }}
-            className="flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200 cursor-pointer w-full text-left"
-            title="Logout"
-          >
-            <LogOut className="h-5 w-5 shrink-0" />
-            <span>Logout</span>
-          </button>
+        {!isAdmin && (
+          <div className="p-3 border-t border-gray-100 flex flex-col gap-2 shrink-0">
+            {/* Logout */}
+            <button
+              onClick={() => {
+                logoutUser()
+                navigate(HOME_ROUTE)
+              }}
+              className="flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200 cursor-pointer w-full text-left"
+              title="Logout"
+            >
+              <LogOut className="h-5 w-5 shrink-0" />
+              <span>Logout</span>
+            </button>
 
-          {/* User Profile */}
-          <Link
-            to={getProfileRoute()}
-            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer"
-            title="My Profile"
-            onClick={() => setIsMobileOpen(false)}
-          >
-            <div className="h-9 w-9 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm select-none">
-              {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
-            </div>
-            <div className="overflow-hidden text-left">
-              <p className="text-sm font-semibold text-gray-900 truncate leading-none mb-1">
-                {user?.name || "User"}
-              </p>
-              <p className="text-xs text-gray-500 capitalize leading-none">
-                {user?.role || "Civilian"}
-              </p>
-            </div>
-          </Link>
-        </div>
+            {/* User Profile */}
+            <Link
+              to={getProfileRoute()}
+              className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer"
+              title="My Profile"
+              onClick={() => setIsMobileOpen(false)}
+            >
+              <div className="h-9 w-9 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm select-none">
+                {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+              </div>
+              <div className="overflow-hidden text-left">
+                <p className="text-sm font-semibold text-gray-900 truncate leading-none mb-1">
+                  {user?.name || "User"}
+                </p>
+                <p className="text-xs text-gray-500 capitalize leading-none">
+                  {user?.role || "Civilian"}
+                </p>
+              </div>
+            </Link>
+          </div>
+        )}
       </aside>
     </>
   )
