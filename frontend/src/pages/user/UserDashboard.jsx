@@ -1071,7 +1071,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Estimated Arrival + Time Elapsed Grid */}
+          /* Estimated Arrival + Time Elapsed Grid */
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", padding: "20px" }}>
             <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
               <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Estimated Arrival</p>
@@ -1195,9 +1195,9 @@ export default function UserDashboard() {
             {/* Header Right Connection Info & Avatar */}
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#16a34a" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a" }} />
-                Connected
-              </span>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a" }} />
+              Connected
+            </span>
               <span style={{ fontSize: "11px", fontWeight: 700, color: "#4b5563" }}>Location Enabled</span>
               
               {/* Small User Photo/Avatar */}
