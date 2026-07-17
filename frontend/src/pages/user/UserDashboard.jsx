@@ -224,7 +224,8 @@ export default function UserDashboard() {
         phone: data.responderPhone || "N/A",
         email: data.responderEmail || "",
         skills: data.responderSkills || [],
-        etaSeconds: data.etaSeconds || 300
+        etaSeconds: data.etaSeconds || 300,
+        etaEstimated: data.etaEstimated === true
       };
 
       setEmergencies(prev =>
@@ -1011,12 +1012,14 @@ export default function UserDashboard() {
     const responderType = emergencyType.charAt(0).toUpperCase() + emergencyType.slice(1)
     const etaMin = typeof responder === "object" && responder?.etaSeconds ? Math.max(1, Math.round(responder.etaSeconds / 60)) : 5
 
-    // Use live responder location if available; otherwise use the initial simulated fallback
-    const responderLat = liveResponderLocation ? liveResponderLocation[0] : (subLat ? subLat + 0.004 : userLocation[0] + 0.004)
-    const responderLon = liveResponderLocation ? liveResponderLocation[1] : (subLon ? subLon + 0.003 : userLocation[1] + 0.003)
+    // Use live responder location if available; otherwise show no marker
+    const responderLat = liveResponderLocation ? liveResponderLocation[0] : null
+    const responderLon = liveResponderLocation ? liveResponderLocation[1] : null
     const myLat = subLat || userLocation[0]
     const myLon = subLon || userLocation[1]
-    const mapCenter = [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
+    const mapCenter = (responderLat !== null && responderLon !== null)
+      ? [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
+      : [myLat, myLon]
 
     return (
       <div style={{ display: "flex", height: "100vh", background: "#f8f9fb", overflow: "hidden" }}>

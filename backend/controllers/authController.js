@@ -51,6 +51,13 @@ export async function register (req, res){
       });
     }
 
+    if (role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: "Admin accounts cannot be created via public registration."
+      });
+    }
+
     // Validate skills for responders
     const validSkills = new Set(['medical', 'fire', 'security', 'general']);
     if (role === 'responder') {
@@ -89,27 +96,29 @@ export async function register (req, res){
     }
     
     // Create new user
+    const finalRole = role || 'user';
     const userData = {
       name,
       email: email.toLowerCase(),
       password,
       phone,
-      role: role || 'user'
+      role: finalRole,
+      isApproved: finalRole === 'responder' ? false : true
     };
 
-    if (role === 'responder') {
+    if (finalRole === 'responder') {
       userData.skills = skills;
     }
 
     const user = await User.create(userData);
     
-    // Generate token
-    const token = user.generateAuthToken();
+    const successMessage = finalRole === 'responder'
+      ? "Registration successful! Your responder account is pending administrator approval."
+      : "Registration successful! You can now log in.";
     
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Welcome to Sahayog.',
-      token,
+      message: successMessage,
       user: {
         id: user._id,
         name: user.name,
@@ -175,10 +184,12 @@ export async function login (req, res) {
       });
     }
 
-    // Mark responders available when they log in
-    if (user.role === 'responder' && !user.isAvailable) {
-      user.isAvailable = true;
-      await user.save();
+    // Block login only when user is a responder and is not approved
+    if (user.role === "responder" && !user.isApproved) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is pending administrator approval."
+      });
     }
     
     // Generate token

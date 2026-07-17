@@ -176,7 +176,7 @@ export async function getAllUsersList(req, res) {
 export async function getPendingUsers(req, res) {
   try {
     const { page = 1, limit = 50 } = req.query;
-    const filter = { isApproved: false };
+    const filter = { role: "responder", isApproved: false };
 
     const [users, total] = await Promise.all([
       User.find(filter)

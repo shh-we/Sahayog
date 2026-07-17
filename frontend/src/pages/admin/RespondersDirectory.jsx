@@ -101,8 +101,10 @@ export default function RespondersDirectory() {
     if (formData.type === "Fire") skills = ["fire"]
     if (formData.type === "Ambulance") skills = ["medical"]
 
-    // Map availability parameters (Offline -> false, Available/Busy -> true)
-    const isAvailable = formData.status !== "Offline"
+    // Fix 3: isAvailable is true ONLY for "Available" status.
+    // Both "Busy" and "Offline" map to isAvailable: false so that dispatch
+    // candidate queries (which filter isAvailable: true) correctly skip them.
+    const isAvailable = formData.status === "Available"
     const status = formData.status.toLowerCase()
 
     try {

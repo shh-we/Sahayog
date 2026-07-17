@@ -167,7 +167,8 @@ export async function dispatchNextResponder(emergencyId) {
         status: "pending",
         offeredAt: new Date(),
         expiresAt: new Date(Date.now() + OFFER_EXPIRY_MS),
-        etaSeconds: best.durationSeconds
+        etaSeconds: best.durationSeconds,
+        etaEstimated: best.estimated === true
       });
 
       // Update emergency state
@@ -315,7 +316,8 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
     responderEmail: responder?.email || "",
     responderSkills: responder?.skills || [],
     emergencyId: attempt.emergencyId.toString(),
-    etaSeconds: attempt.etaSeconds
+    etaSeconds: attempt.etaSeconds,
+    etaEstimated: attempt.etaEstimated === true
   });
 
   return {

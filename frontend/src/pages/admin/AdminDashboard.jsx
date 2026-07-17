@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import useAuthStore from "../../stores/authStore.js"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
-import { getEmergencies } from "../../api/emergency.js"
-import { getAllResponders, getStats } from "../../api/admin.js"
+import { getAllEmergencies, getAllResponders, getStats } from "../../api/admin.js"
+import { ADMIN_DASHBOARD } from "../../constants/routes.js"
 import toast from "react-hot-toast"
 import { 
   AlertTriangle, 
@@ -25,7 +24,6 @@ import {
 } from "lucide-react"
 
 export default function AdminDashboard() {
-  const user = useAuthStore((state) => state.user)
   const navigate = useNavigate()
   const [emergencies, setEmergencies] = useState([])
   const [responders, setResponders] = useState([])
@@ -68,11 +66,23 @@ export default function AdminDashboard() {
         original: e
       })
       
-      if (["assigned", "en_route", "on_scene"].includes(e.status)) {
+      // Fix 5: Use responderStatus when available for accurate progress labels.
+      // Falls back to emergency status when responderStatus is not yet set.
+      if (e.status === "assigned" || e.status === "en_route" || e.status === "on_scene") {
+        let responderLabel = "Responder assigned"
+        const rs = e.responderStatus
+        if (rs === "en_route") {
+          responderLabel = "Responder en route"
+        } else if (rs === "on_scene") {
+          responderLabel = "Responder on scene"
+        } else if (!rs) {
+          // No responderStatus set yet — fall back to emergency status
+          responderLabel = `Responder ${e.status.replace("_", " ")}`
+        }
         events.push({
           id: `responder-${e._id}`,
           type: "responder",
-          title: `Responder ${e.status.replace("_", " ")}`,
+          title: responderLabel,
           detail: `${e.type.toUpperCase()} at ${e.address}`,
           time: new Date(e.updatedAt || e.createdAt),
           status: e.status,
@@ -110,7 +120,7 @@ export default function AdminDashboard() {
         // Fetch all data in parallel
         const [statsRes, emergenciesRes, respondersRes] = await Promise.all([
           getStats(),
-          getEmergencies({ limit: 100 }),
+          getAllEmergencies({ limit: 100 }), // Fix 6: admin-scoped endpoint
           getAllResponders({ limit: 100 })
         ])
 
@@ -386,7 +396,7 @@ export default function AdminDashboard() {
         <div className="w-full lg:w-96 bg-white border border-gray-200 rounded-2xl flex flex-col shadow-xs min-h-[480px] max-h-[540px]">
           <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              Live Activity
+              Live Activity{' '}
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -456,7 +466,7 @@ export default function AdminDashboard() {
 
       {/* Emergency Details Modern Overlay Dialog */}
       {selectedEmergency && (
-        <div className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-100 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">

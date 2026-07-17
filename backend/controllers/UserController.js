@@ -250,6 +250,13 @@ export async function toggleAvailability(req, res) {
 
     // Flip current availability
     user.isAvailable = !user.isAvailable;
+
+    // Fix 4: Sync status field to match availability, but preserve "busy" if an
+    // active assignment is in place — the emergency workflow resolves that.
+    if (user.status !== 'busy') {
+      user.status = user.isAvailable ? 'available' : 'offline';
+    }
+
     await user.save();
 
     // Emit Socket.IO event for availability change
@@ -258,7 +265,8 @@ export async function toggleAvailability(req, res) {
     io.emit(eventName, {
       responderId: req.user.id,
       responderName: user.name,
-      isAvailable: user.isAvailable
+      isAvailable: user.isAvailable,
+      status: user.status
     });
 
     res.status(200).json({

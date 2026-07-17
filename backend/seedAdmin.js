@@ -30,6 +30,7 @@ const seedAdmin = async () => {
       password: ADMIN_PASSWORD,
       phone: ADMIN_PHONE,
       role: "admin",
+      isApproved: true  // Admin seed accounts are always approved
     });
 
     console.log("Admin created successfully:");

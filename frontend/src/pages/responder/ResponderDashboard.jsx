@@ -19,6 +19,7 @@ import {
   updateResponseStatus
 } from "../../api/responder.js"
 import { HOME_ROUTE } from "../../constants/routes.js"
+import { getDrivingRoute } from "../../api/routing.js"
 import toast from "react-hot-toast"
 import {
   AlertCircle,
@@ -346,19 +347,18 @@ export default function ResponderDashboard() {
             throw new Error("Target assignment coordinates not found")
           }
           const [eLon, eLat] = eCoords
-          const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${rLon},${rLat};${eLon},${eLat}?overview=full&geometries=geojson`)
-          const data = await response.json()
-          if (data.routes && data.routes.length > 0) {
-            routeCoords = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]])
-          } else {
-            routeCoords = [[rLat, rLon], [eLat, eLon]]
+          const res = await getDrivingRoute({
+            fromLat: rLat,
+            fromLng: rLon,
+            toLat: eLat,
+            toLng: eLon
+          })
+          if (res.data && res.data.success && res.data.geometry) {
+            routeCoords = res.data.geometry.map(coord => [coord[1], coord[0]])
           }
         } catch (err) {
           console.error("Failed to fetch route for sync:", err)
-          const targetAssignment = assignments.find(a => a._id === emergencyId) || activeAssignment
-          const eCoords = targetAssignment?.reporterLocation?.coordinates
-          const fallbackDest = eCoords ? [eCoords[1], eCoords[0]] : responderLocation
-          routeCoords = [responderLocation, fallbackDest]
+          toast.error("Road route is temporarily unavailable; location sharing continues.")
         }
         journeyData = {
           routeCoordinates: routeCoords,

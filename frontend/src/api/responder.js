@@ -22,11 +22,7 @@ export const updateLocation = (data) => api.put("/responders/location", data);
 
 export const getNearbyResponders = (params) =>
   api.get("/responders/nearby", { params });
- 
-// POST /api/responders/emergencies/:id/feedback
-// data: { rating, comment } — only emergency creator can submit
-export const submitFeedback = (id, data) =>
-  api.post(`/responders/emergencies/${id}/feedback`, data);
+
 
 // POST /api/dispatch/:attemptId/accept
 export const acceptDispatchAttempt = (attemptId) =>
