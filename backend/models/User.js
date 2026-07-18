@@ -81,6 +81,19 @@ const userSchema = new mongoose.Schema({
     }
   },
   
+  // Admin approval status
+  isApproved: {
+    type: Boolean,
+    default: false  // All new accounts start as pending
+  },
+
+  // Active status of responders
+  status: {
+    type: String,
+    enum: ["available", "busy", "offline"],
+    default: "offline"
+  }
+
 }, {
   timestamps: true     // Automatically add createdAt and updatedAt fields
 });

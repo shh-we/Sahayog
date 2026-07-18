@@ -2,7 +2,7 @@ import { Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 
 // Create custom emergency markers by type
-const getEmergencyIcon = (type) => {
+const getEmergencyIcon = (type, isTarget) => {
   const colors = {
     fire: '#ff0000',           // Red
     medical: '#0000ff',        // Blue
@@ -11,14 +11,25 @@ const getEmergencyIcon = (type) => {
     other: '#808080'           // Gray
   }
   
-  const color = colors[type] || colors.other
+  const color = isTarget ? '#dc2626' : (colors[type] || colors.other)
+  const size = isTarget ? 36 : 30
+  const boxShadow = isTarget ? `box-shadow: 0 0 15px 5px rgba(220, 38, 38, 0.5);` : ''
+  const animation = isTarget ? `animation: pulseMarker 2s infinite;` : ''
 
   return L.divIcon({
     className: 'custom-icon',
-    html: `<div style="
+    html: `
+      <style>
+        @keyframes pulseMarker {
+          0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+          70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+      </style>
+      <div style="
       background-color: ${color};
-      width: 30px;
-      height: 30px;
+      width: ${size}px;
+      height: ${size}px;
       border-radius: 50%;
       border: 3px solid white;
       display: flex;
@@ -26,14 +37,16 @@ const getEmergencyIcon = (type) => {
       justify-content: center;
       color: white;
       font-weight: bold;
+      ${boxShadow}
+      ${animation}
     ">!</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -15]
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
+    popupAnchor: [0, -size/2]
   })
 }
 
-export default function EmergencyMarker({ emergency, onClick }) {
+export default function EmergencyMarker({ emergency, onClick, isTarget = false }) {
   const [longitude, latitude] = emergency.reporterLocation?.coordinates || [null, null]
   const { type, description } = emergency
 
@@ -45,7 +58,7 @@ export default function EmergencyMarker({ emergency, onClick }) {
   return (
     <Marker 
       position={[latitude, longitude]}
-      icon={getEmergencyIcon(type)}
+      icon={getEmergencyIcon(type, isTarget)}
       eventHandlers={{
         click: () => onClick?.(emergency)
       }}

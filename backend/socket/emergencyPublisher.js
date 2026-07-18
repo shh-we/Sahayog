@@ -24,7 +24,8 @@ import {
   DISPATCH_OFFER,
   RESPONDER_ASSIGNED,
   RESPONDER_LOCATION,
-  EMERGENCY_STATUS_UPDATE
+  EMERGENCY_STATUS_UPDATE,
+  JOURNEY_STARTED
 } from "./events.js";
 
 // ─── Publisher functions ──────────────────────────────────────────────────────
@@ -76,4 +77,16 @@ export function publishResponderLocation(emergencyId, payload) {
  */
 export function publishEmergencyStatusUpdate(emergencyId, payload) {
   getIO().to(emergencyRoom(emergencyId)).emit(EMERGENCY_STATUS_UPDATE, payload);
+}
+
+/**
+ * Broadcasts journey start state to everyone watching the emergency.
+ * Enables the user dashboard to run a synchronized, timestamp-based animation
+ * that stays accurate even after page refresh.
+ *
+ * @param {string} emergencyId - The emergency's database ID.
+ * @param {Object} payload     - { emergencyId, routeCoordinates, journeyStartedAt }
+ */
+export function publishJourneyStarted(emergencyId, payload) {
+  getIO().to(emergencyRoom(emergencyId)).emit(JOURNEY_STARTED, payload);
 }

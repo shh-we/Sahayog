@@ -20,6 +20,7 @@
 
 import Emergency from "../models/Emergency.js";
 import DispatchAttempt from "../models/DispatchAttempt.js";
+import User from "../models/User.js";
 import { findEligibleCandidates } from "./candidateService.js";
 import { getCandidateEtas } from "./routing/routeService.js";
 import { getRequiredSkills } from "./emergencyService.js";
@@ -39,6 +40,7 @@ const OFFER_EXPIRY_MS = 25_000; // 25 seconds
 export const deps = {
   Emergency,
   DispatchAttempt,
+  User,
   findEligibleCandidates,
   getCandidateEtas,
   getRequiredSkills,
@@ -165,7 +167,8 @@ export async function dispatchNextResponder(emergencyId) {
         status: "pending",
         offeredAt: new Date(),
         expiresAt: new Date(Date.now() + OFFER_EXPIRY_MS),
-        etaSeconds: best.durationSeconds
+        etaSeconds: best.durationSeconds,
+        etaEstimated: best.estimated === true
       });
 
       // Update emergency state
@@ -218,7 +221,7 @@ export async function declineDispatchAttempt(attemptId) {
   const attempt = await deps.DispatchAttempt.findOneAndUpdate(
     { _id: attemptId, status: "pending" },
     { status: "declined", respondedAt: new Date() },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!attempt) {
@@ -261,7 +264,7 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
       expiresAt: { $gt: now }
     },
     { status: "accepted", respondedAt: now },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!attempt) {
@@ -280,7 +283,7 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
       dispatchStatus: "assigned",
       assignedResponder: responderId
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!emergency) {
@@ -305,10 +308,16 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
   // 4. (Removed responders array update as responders field is removed from Emergency model)
 
   // 5. Notify emergency room via publisher
+  const responder = await deps.User.findById(responderId);
   deps.publishResponderAssigned(attempt.emergencyId.toString(), {
     responderId: responderId.toString(),
+    responderName: responder?.name || "Rescue Team",
+    responderPhone: responder?.phone || "N/A",
+    responderEmail: responder?.email || "",
+    responderSkills: responder?.skills || [],
     emergencyId: attempt.emergencyId.toString(),
-    etaSeconds: attempt.etaSeconds
+    etaSeconds: attempt.etaSeconds,
+    etaEstimated: attempt.etaEstimated === true
   });
 
   return {

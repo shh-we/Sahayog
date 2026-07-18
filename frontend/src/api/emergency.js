@@ -23,4 +23,13 @@ export const updateEmergencyStatus = (id, data) =>
  
 // DELETE /api/emergencies/:id — soft delete (sets status to cancelled)
 export const deleteEmergency = (id) => api.delete(`/emergencies/${id}`);
+
+// A* Route endpoints
+export const getResponderToIncidentRoute = (id) =>
+  api.get(`/emergencies/${id}/route/responder`);
+
+export const getIncidentToFacilityRoute = (id, facilityType) =>
+  api.get(`/emergencies/${id}/route/facility`, {
+    params: facilityType ? { facilityType } : {}
+  });
  

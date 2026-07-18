@@ -33,6 +33,10 @@ const dispatchAttemptSchema = new mongoose.Schema({
   etaSeconds: {
     type: Number,
     default: null
+  },
+  etaEstimated: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

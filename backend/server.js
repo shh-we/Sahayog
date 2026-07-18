@@ -7,9 +7,11 @@ import emergencyRoutes from "./routes/emergencyRoutes.js";
 import responderRoutes from "./routes/responderRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import dispatchRoutes from "./routes/dispatchRoutes.js";
+import routeRoutes from "./routes/routeRoutes.js";
 import {connectDB} from'./config/db.js';
 import { initializeSocket } from "./socket/index.js";
 import { startDispatchWorker } from "./workers/dispatchWorker.js";
+import { loadGraph } from "./services/routing/aStarGraphLoader.js";
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +36,7 @@ app.use(express.urlencoded({
   app.use("/api/responders", responderRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/dispatch", dispatchRoutes);
+  app.use("/api/routes", routeRoutes);
 
 
 
@@ -51,3 +54,6 @@ initializeSocket(server);
 
 // Start the dispatch expiry worker (Feature 4)
 startDispatchWorker();
+
+// Load the A* road graph into memory (Feature: A* routing)
+loadGraph();

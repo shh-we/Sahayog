@@ -1,4 +1,6 @@
 import User from "../models/User.js";
+import Emergency from "../models/Emergency.js";
+import { publishResponderLocation } from "../socket/emergencyPublisher.js";
 import { getIO } from "../socket/index.js";
 
 // @desc    Get logged in user profile
@@ -198,17 +200,23 @@ export async function updateLocation(req, res) {
           coordinates: [longitude, latitude]
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).select("-password");
 
-    // Emit Socket.IO event for location update
-    const io = getIO();
-    io.emit("location_update", {
-      responderId: req.user.id,
-      responderName: user.name,
-      latitude: latitude,
-      longitude: longitude
+    // Find active assignment and publish location to emergency room
+    const activeEmergency = await Emergency.findOne({
+      assignedResponder: req.user.id,
+      status: { $in: ["assigned", "in_progress"] }
     });
+
+    if (activeEmergency) {
+      publishResponderLocation(activeEmergency._id.toString(), {
+        emergencyId: activeEmergency._id.toString(),
+        responderId: req.user.id.toString(),
+        coordinates: [longitude, latitude],
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -242,6 +250,13 @@ export async function toggleAvailability(req, res) {
 
     // Flip current availability
     user.isAvailable = !user.isAvailable;
+
+    // Fix 4: Sync status field to match availability, but preserve "busy" if an
+    // active assignment is in place — the emergency workflow resolves that.
+    if (user.status !== 'busy') {
+      user.status = user.isAvailable ? 'available' : 'offline';
+    }
+
     await user.save();
 
     // Emit Socket.IO event for availability change
@@ -250,7 +265,8 @@ export async function toggleAvailability(req, res) {
     io.emit(eventName, {
       responderId: req.user.id,
       responderName: user.name,
-      isAvailable: user.isAvailable
+      isAvailable: user.isAvailable,
+      status: user.status
     });
 
     res.status(200).json({

@@ -26,3 +26,7 @@ export const RESPONDER_LOCATION = "responder:location";
 
 /** Sent to `emergency:<emergencyId>` when the emergency status changes. */
 export const EMERGENCY_STATUS_UPDATE = "emergency:statusUpdate";
+
+/** Sent to `emergency:<emergencyId>` when the responder starts the journey.
+ *  Payload: { emergencyId, routeCoordinates, journeyStartedAt } */
+export const JOURNEY_STARTED = "journey:started";

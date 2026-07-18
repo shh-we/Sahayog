@@ -6,12 +6,13 @@ export const acceptEmergency = (id) =>
  
 // PUT /api/responders/emergencies/:id/status
 // data: { status } — en_route | on_scene | completed
-export const updateResponseStatus = (id, status) =>
-  api.put(`/responders/emergencies/${id}/status`, { status });
+// journeyData: { routeCoordinates, journeyStartedAt } — only when status = en_route
+export const updateResponseStatus = (id, status, journeyData = {}) =>
+  api.put(`/responders/emergencies/${id}/status`, { status, ...journeyData });
  
 // GET /api/responders/my-assignments
 // returns emergencies this responder has accepted (assigned or in_progress)
-export const getMyAssignments = () => api.get("/responders/my-assignments");
+export const getMyAssignments = (history = false) => api.get(`/responders/my-assignments${history ? "?history=true" : ""}`);
 
 // PUT /api/responders/availability
 // Toggle responder availability (online/offline)
@@ -21,8 +22,12 @@ export const updateLocation = (data) => api.put("/responders/location", data);
 
 export const getNearbyResponders = (params) =>
   api.get("/responders/nearby", { params });
- 
-// POST /api/responders/emergencies/:id/feedback
-// data: { rating, comment } — only emergency creator can submit
-export const submitFeedback = (id, data) =>
-  api.post(`/responders/emergencies/${id}/feedback`, data);
+
+
+// POST /api/dispatch/:attemptId/accept
+export const acceptDispatchAttempt = (attemptId) =>
+  api.post(`/dispatch/${attemptId}/accept`);
+
+// POST /api/dispatch/:attemptId/decline
+export const declineDispatchAttempt = (attemptId) =>
+  api.post(`/dispatch/${attemptId}/decline`);

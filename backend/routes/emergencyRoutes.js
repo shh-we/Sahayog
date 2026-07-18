@@ -6,7 +6,9 @@ import {
   getNearbyEmergencies,
   updateStatus,
   deleteEmergency,
-  updateResponderStatus
+  updateResponderStatus,
+  getResponderRouteHandler,
+  getFacilityRouteHandler
 } from "../controllers/EmergencyController.js";
 import { protect, authorize } from "../middleware/auth.js";
 
@@ -16,6 +18,11 @@ const router = express.Router();
 router.post("/", protect, createEmergency);
 router.get("/", protect, getEmergencies);
 router.get("/nearby", protect, getNearbyEmergencies);
+
+// A* routing endpoints (must be before /:id to avoid param capture)
+router.get("/:id/route/responder", protect, getResponderRouteHandler);
+router.get("/:id/route/facility", protect, getFacilityRouteHandler);
+
 router.get("/:id", protect, getEmergencyById);
 
 // Responder or admin only

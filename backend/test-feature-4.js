@@ -280,10 +280,23 @@ const mockDispatchAttemptModel = {
   }
 };
 
+const mockUserModel = {
+  findById: async (id) => {
+    return {
+      _id: id,
+      name: "Mock Responder",
+      phone: "1234567890",
+      email: "mock@responder.com",
+      skills: ["medical"]
+    };
+  }
+};
+
 // ─── Wire mock dependencies onto serviceDeps & workerDeps ───────────────────
 
 serviceDeps.Emergency = mockEmergencyModel;
 serviceDeps.DispatchAttempt = mockDispatchAttemptModel;
+serviceDeps.User = mockUserModel;
 serviceDeps.findEligibleCandidates = mockFindEligibleCandidates;
 serviceDeps.getCandidateEtas = mockGetCandidateEtas;
 serviceDeps.publishDispatchOffer = mockPublishDispatchOffer;
