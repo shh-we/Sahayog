@@ -3,7 +3,7 @@ import Sidebar from "./Sidebar.jsx"
 
 export default function DashboardLayout() {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       {/* Sidebar — always rendered; handles its own mobile/desktop visibility */}
       <Sidebar />
 

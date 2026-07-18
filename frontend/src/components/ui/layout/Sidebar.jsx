@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import useAuthStore from "../../../stores/authStore.js"
 import { HOME_ROUTE, USER_DASHBOARD, RESPONDER_DASHBOARD, ADMIN_DASHBOARD, ADMIN_VERIFICATION_QUEUE, ADMIN_RESPONDERS_DIRECTORY } from "../../../constants/routes.js"
@@ -33,6 +33,28 @@ export default function Sidebar() {
 
   const [expandedItems, setExpandedItems] = useState({})
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+
+  // Handle escape key and scroll lock for mobile drawer
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape" && isMobileOpen) {
+        setIsMobileOpen(false)
+      }
+    }
+
+    if (isMobileOpen) {
+      document.body.style.overflow = "hidden"
+      document.addEventListener("keydown", handleEscape)
+    } else {
+      document.body.style.overflow = "unset"
+      document.removeEventListener("keydown", handleEscape)
+    }
+
+    return () => {
+      document.body.style.overflow = "unset"
+      document.removeEventListener("keydown", handleEscape)
+    }
+  }, [isMobileOpen])
 
   // Helper to determine if a link is active based on path and query parameters
   const isLinkActive = (itemPath) => {
@@ -198,13 +220,15 @@ export default function Sidebar() {
   return (
     <>
       {/* Floating Toggle Button (Mobile Only) */}
-      <button
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="fixed top-4 left-4 z-[99] p-2 bg-white rounded-xl border border-gray-200 shadow-sm md:hidden cursor-pointer hover:bg-gray-50 text-gray-700"
-        aria-label="Toggle Menu"
-      >
-        {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
+      {!isMobileOpen && (
+        <button
+          onClick={() => setIsMobileOpen(true)}
+          className="fixed top-4 left-4 z-[40] p-2 bg-white rounded-xl border border-gray-200 shadow-sm md:hidden cursor-pointer hover:bg-gray-50 text-gray-700"
+          aria-label="Open Menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       {/* Backdrop (Mobile Only) */}
       {isMobileOpen && (
@@ -226,7 +250,7 @@ export default function Sidebar() {
         `}
       >
         {/* Logo Section */}
-        <div className={`flex items-center shrink-0 ${isAdmin ? "px-4 pt-5 pb-3 justify-start" : "gap-3 px-5 py-6 border-b border-gray-100"}`}>
+        <div className={`flex items-center shrink-0 w-full ${isAdmin ? "px-4 pt-5 pb-3 justify-start" : "gap-3 px-5 py-6 border-b border-gray-100"}`}>
           <Link to={HOME_ROUTE} className="flex items-center gap-2">
             <span className={`overflow-hidden shrink-0 flex items-start justify-center ${isAdmin ? "h-6 w-7" : "h-9 w-10"}`}>
               <img
@@ -239,6 +263,15 @@ export default function Sidebar() {
               Sahayog
             </span>
           </Link>
+          
+          {/* Internal Close Button (Mobile Only) */}
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="md:hidden ml-auto p-2 bg-white rounded-xl border border-gray-200 shadow-sm text-gray-500 hover:bg-gray-50 cursor-pointer"
+            aria-label="Close Menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Main Navigation (Scrollable) */}
