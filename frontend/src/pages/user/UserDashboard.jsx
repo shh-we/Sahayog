@@ -8,7 +8,7 @@ import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.js
 import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
-import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
+import { getNearbyEmergencies, createEmergency, deleteEmergency, getEmergencies } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
 import { Marker, Circle, useMapEvents, useMap, Polyline } from "react-leaflet"
 import L from "leaflet"
@@ -71,8 +71,8 @@ export default function UserDashboard() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [submittedEmergency, setSubmittedEmergency] = useState(null)
   const [radarRadius, setRadarRadius] = useState(100)
-  const [dispatchedAt, setDispatchedAt] = useState(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [showDetails, setShowDetails] = useState(false)
 
   const [liveResponderLocation, setLiveResponderLocation] = useState(null)
   const [syncRouteCoordinates, setSyncRouteCoordinates] = useState(null)
@@ -81,18 +81,22 @@ export default function UserDashboard() {
   currentEmergencyRef.current = submittedEmergency || selectedEmergency
 
   useEffect(() => {
-    setLiveResponderLocation(null)
-    if (submittedEmergency) {
-      setSyncRouteCoordinates(submittedEmergency.routeCoordinates || null)
-      setSyncJourneyStartedAt(submittedEmergency.journeyStartedAt || null)
-    } else {
+    if (submittedEmergency?._id) {
       setSyncRouteCoordinates(null)
       setSyncJourneyStartedAt(null)
     }
-  }, [submittedEmergency?._id])
+  }, [submittedEmergency])
 
   const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
   const subLon = submittedEmergency?.reporterLocation?.coordinates?.[0] || null
+
+  const myLat = subLat || userLocation[0]
+  const myLon = subLon || userLocation[1]
+  const responderLat = liveResponderLocation ? liveResponderLocation[0] : null
+  const responderLon = liveResponderLocation ? liveResponderLocation[1] : null
+  const mapCenter = (responderLat !== null && responderLon !== null)
+    ? [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
+    : [myLat, myLon]
 
   // Pulse effect for searching responders (up to 500m)
   useEffect(() => {
@@ -111,6 +115,7 @@ export default function UserDashboard() {
       toast.success("Emergency report cancelled successfully", { id: toastId })
       setIsSubmitted(false)
       setSubmittedEmergency(null)
+      setShowDetails(false)
     } catch (error) {
       console.error("Error cancelling emergency:", error)
       toast.error(error.response?.data?.message || "Failed to cancel emergency", { id: toastId })
@@ -188,25 +193,46 @@ export default function UserDashboard() {
     }
   }, [userLocation])
 
-  // Reset submitted state when changing tabs
+  // Check for user's active emergency on mount or user change
   useEffect(() => {
-    if (activeTab !== "report" && activeTab !== null && activeTab !== "") {
-      setIsSubmitted(false)
-      setSubmittedEmergency(null)
+    const checkActiveEmergency = async () => {
+      try {
+        const res = await getEmergencies()
+        const userEmergencies = res.data.emergencies || []
+        // Find the latest emergency that is not resolved or cancelled
+        const active = userEmergencies.find(
+          (e) => ["active", "assigned", "in_progress"].includes(e.status)
+        )
+        if (active) {
+          setSubmittedEmergency(active)
+          setIsSubmitted(true)
+          if (active.responderStatus === "en_route") {
+            setSyncRouteCoordinates(active.routeCoordinates)
+            setSyncJourneyStartedAt(active.journeyStartedAt)
+          }
+        }
+      } catch (error) {
+        console.error("Error checking active emergency:", error)
+      }
     }
-  }, [activeTab])
+    if (user?.id) {
+      checkActiveEmergency()
+    }
+  }, [user?.id])
 
   // Elapsed time timer for dispatched emergency view
   const dispatchedStatus = submittedEmergency?.status || "pending"
-  const showDispatchedView = isSubmitted && ["assigned", "en_route", "on_scene", "resolved"].includes(dispatchedStatus)
+  const isDispatched = ["assigned", "en_route", "on_scene", "resolved"].includes(dispatchedStatus)
+  const isOnScene = ["on_scene", "resolved"].includes(dispatchedStatus)
 
   useEffect(() => {
-    if (!showDispatchedView || !dispatchedAt) return
+    if (!isSubmitted || !isDispatched || !submittedEmergency?.createdAt) return
+    const reportTime = new Date(submittedEmergency.createdAt).getTime()
     const interval = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - dispatchedAt) / 1000))
+      setElapsedTime(Math.floor((Date.now() - reportTime) / 1000))
     }, 1000)
     return () => clearInterval(interval)
-  }, [showDispatchedView, dispatchedAt])
+  }, [isSubmitted, isDispatched, submittedEmergency?.createdAt])
 
   // Socket.IO real-time updates
   const socket = useSocketInstance()
@@ -235,8 +261,6 @@ export default function UserDashboard() {
       setSubmittedEmergency(prev =>
         prev && prev._id === data.emergencyId ? { ...prev, status: "assigned", assignedResponder: assignedObj } : prev
       )
-      // Record dispatch time
-      setDispatchedAt(Date.now())
     })
 
     // emergency:statusUpdate — status changed (en_route / on_scene / resolved).
@@ -733,9 +757,346 @@ export default function UserDashboard() {
       case "report":
       default:
         if (isSubmitted) {
-          const emergencyStatus = submittedEmergency?.status || "pending"
-          const isDispatched = ["assigned", "en_route", "on_scene", "resolved"].includes(emergencyStatus)
-          const isOnScene = ["on_scene", "resolved"].includes(emergencyStatus)
+          const incidentId = `INC-${submittedEmergency?._id?.slice(-4).toUpperCase() || "0000"}`
+          const emergencyType = submittedEmergency?.type || "general"
+          const reportedTime = submittedEmergency?.createdAt
+            ? new Date(submittedEmergency.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+              " - " +
+              new Date(submittedEmergency.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+            : "N/A"
+
+          const responder = submittedEmergency?.assignedResponder
+          const responderName = typeof responder === "object" ? (responder?.name || "Rescue Team") : "Rescue Team"
+          const responderPhone = typeof responder === "object" ? (responder?.phone || "") : ""
+          const responderSkills = typeof responder === "object" ? (responder?.skills || []) : []
+          const responderSkillsFormatted = responderSkills.length > 0 
+            ? responderSkills.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(", ") 
+            : "Emergency Response"
+          const responderType = emergencyType.charAt(0).toUpperCase() + emergencyType.slice(1)
+
+          if (showDetails) {
+            return (
+              <div className="flex flex-col h-full bg-[#fafafa]">
+                {/* Header with Back button */}
+                <div className="p-4 bg-white border-b border-gray-100 flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowDetails(false)}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition cursor-pointer"
+                  >
+                    <ChevronRight className="h-5 w-5 rotate-180" />
+                  </button>
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900 leading-tight">Details</h2>
+                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">Incident: {incidentId}</p>
+                  </div>
+                </div>
+
+                {/* Scrollable details cards */}
+                <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                  {/* 1. Assigned Responder card */}
+                  <div className="border border-gray-200 rounded-2xl p-5 bg-white shadow-xs">
+                    <p className="text-[9px] font-extrabold text-gray-400 uppercase tracking-wider mb-4">ASSIGNED RESPONDER</p>
+                    {isDispatched ? (
+                      <>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
+                              <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-950 leading-tight">{responderName}</p>
+                              <p className="text-[10px] text-gray-500 font-semibold mt-1">{responderSkillsFormatted}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (responderPhone) {
+                                  window.location.href = `tel:${responderPhone}`
+                                } else {
+                                  toast.error("Phone number not available")
+                                }
+                              }}
+                              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                            >
+                              <PhoneCall className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toast.success(`Opening chat with ${responderName}...`)}
+                              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="border-t border-gray-100 pt-3.5 grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+                            <p className="text-xs font-bold text-green-600 mt-1">{isOnScene ? "On scene" : "On the way"}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Type</span>
+                            <p className="text-xs font-bold text-gray-950 mt-1 capitalize">{responderType}</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-4 text-xs font-semibold text-gray-500 bg-gray-50 border border-gray-100 rounded-xl">
+                        Searching for responder...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Incident Details card */}
+                  <div className="border border-gray-200 rounded-2xl p-5 bg-white shadow-xs space-y-3.5">
+                    <p className="text-[9px] font-extrabold text-gray-400 uppercase tracking-wider">INCIDENT DETAILS</p>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500 font-semibold">Incident ID</span>
+                      <span className="text-gray-950 font-bold">{incidentId}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500 font-semibold">Type</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold capitalize bg-red-50 text-red-700 border border-red-100">
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                        {emergencyType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500 font-semibold">Reported</span>
+                      <span className="text-gray-950 font-bold">{reportedTime}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Action buttons */}
+                <div className="p-4 border-t border-gray-200 bg-white shrink-0 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (responderPhone) {
+                        window.location.href = `tel:${responderPhone}`
+                      } else {
+                        toast.error("Phone number not available")
+                      }
+                    }}
+                    className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <PhoneCall className="h-4 w-4" />
+                    Call responder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toast.success("Location shared successfully!")}
+                    className="w-full py-3 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <MapPin className="h-4 w-4 text-gray-500" />
+                    Share exact location
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
+          if (dispatchedStatus === "resolved") {
+            return (
+              <div className="flex flex-col items-center justify-center h-full bg-slate-50 p-6 text-center font-sans">
+                <div className="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xl max-w-sm w-full space-y-6">
+                  <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                    <CheckCircle className="w-10 h-10" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Emergency Resolved</h2>
+                    <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                      The rescue team has successfully addressed the emergency and marked the status as resolved.
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3.5 text-left text-xs text-slate-600">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-slate-400">Incident ID</span>
+                      <span className="font-bold text-slate-800">{incidentId}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-slate-400">Category</span>
+                      <span className="font-bold text-slate-800 capitalize">{emergencyType}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-slate-400">Status</span>
+                      <span className="font-bold text-green-600 flex items-center gap-1.5 bg-green-50 border border-green-200 px-3 py-1 rounded-full text-[10px] uppercase tracking-wide">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
+                        Resolved
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsSubmitted(false);
+                      setSubmittedEmergency(null);
+                      setSearchParams({ tab: "report" });
+                      setShowDetails(false);
+                    }}
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-sm font-bold transition-all shadow-md hover:shadow-lg cursor-pointer"
+                  >
+                    Return to Dashboard
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          if (isDispatched) {
+            const elapsedMin = String(Math.floor(elapsedTime / 60)).padStart(2, "0")
+            const elapsedSec = String(elapsedTime % 60).padStart(2, "0")
+            const etaMin = typeof responder === "object" && responder?.etaSeconds ? Math.max(1, Math.round(responder.etaSeconds / 60)) : 5
+
+            return (
+              <div className="flex flex-col h-full bg-[#fafafa]">
+                {/* Scrollable Panel Area */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  
+                  {/* Red Hero Card */}
+                  <div className="bg-[#cb2525] rounded-2xl p-5 text-white shadow-md">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="inline-flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wider text-white/90">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        Active Emergency
+                      </span>
+                      <span className="text-[9px] font-extrabold text-white/70 bg-white/15 px-2 py-0.5 rounded-md">{incidentId}</span>
+                    </div>
+                    <h3 className="text-lg font-black tracking-tight mb-1.5">Help is on the way</h3>
+                    <p className="text-[11px] text-white/80 leading-relaxed mb-5">
+                      Stay where you are and keep your phone nearby. Response team can see your live location.
+                    </p>
+
+                    {/* Progress Bar / Steps */}
+                    <div className="flex items-center justify-between relative px-1">
+                      <div className="absolute top-2 left-4 right-4 h-0.5 bg-white/25 z-0" />
+                      <div 
+                        className="absolute top-2 left-4 h-0.5 bg-white z-0 transition-all duration-500" 
+                        style={{ width: isOnScene ? "calc(100% - 32px)" : "calc(50% - 16px)" }} 
+                      />
+
+                      {/* Step 1: Reported */}
+                      <div className="flex flex-col items-center z-10 relative">
+                        <div className="w-4.5 h-4.5 rounded-full bg-white border border-[#cb2525] flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#cb2525]" />
+                        </div>
+                        <span className="text-[8px] font-bold text-white mt-1.5">Reported</span>
+                      </div>
+
+                      {/* Step 2: Dispatched */}
+                      <div className="flex flex-col items-center z-10 relative">
+                        <div className="w-4.5 h-4.5 rounded-full bg-white border border-[#cb2525] flex items-center justify-center shadow-[0_0_0_3px_rgba(255,255,255,0.25)]">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#cb2525]" />
+                        </div>
+                        <span className="text-[8px] font-bold text-white mt-1.5">Dispatched</span>
+                      </div>
+
+                      {/* Step 3: On Scene */}
+                      <div className="flex flex-col items-center z-10 relative">
+                        <div className={`w-4.5 h-4.5 rounded-full ${isOnScene ? 'bg-white border border-[#cb2525]' : 'bg-white/45'} flex items-center justify-center`}>
+                          {isOnScene && <div className="w-1.5 h-1.5 rounded-full bg-[#cb2525]" />}
+                        </div>
+                        <span className={`text-[8px] font-bold mt-1.5 ${isOnScene ? 'text-white' : 'text-white/60'}`}>On Scene</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ETA + Elapsed Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xs">
+                      <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5">Estimated Arrival</p>
+                      <p className="text-2xl font-black text-gray-900 leading-none">
+                        {etaMin} <span className="text-xs font-bold text-gray-500">min</span>
+                      </p>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xs">
+                      <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5">Time Elapsed</p>
+                      <p className="text-2xl font-black text-gray-900 leading-none font-mono">
+                        {elapsedMin}:{elapsedSec}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Assigned Responder Card */}
+                  <div className="border border-gray-200 rounded-xl p-4 bg-white shadow-2xs">
+                    <p className="text-[8px] font-extrabold text-gray-400 uppercase tracking-wider mb-3.5">Assigned Responder</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 shadow-3xs">
+                          <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-950 truncate leading-none mb-1.5">{responderName}</p>
+                          <p className="text-[10px] text-gray-500 font-semibold truncate leading-none">{responderSkillsFormatted}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button 
+                          onClick={() => {
+                            if (responderPhone) {
+                              window.location.href = `tel:${responderPhone}`
+                            } else {
+                              toast.error("Phone number not available")
+                            }
+                          }}
+                          className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                        >
+                          <PhoneCall className="h-3.5 w-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => toast.success(`Opening chat with ${responderName}...`)}
+                          className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+                        <p className="font-bold text-green-600 mt-1">{isOnScene ? "On scene" : "On the way"}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Type</span>
+                        <p className="font-bold text-gray-950 mt-1 capitalize">{responderType}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Bottom Actions Area */}
+                <div className="p-4 border-t border-gray-200 bg-white shrink-0 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (responderPhone) {
+                        window.location.href = `tel:${responderPhone}`
+                      } else {
+                        toast.error("Phone number not available")
+                      }
+                    }}
+                    className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <PhoneCall className="h-4 w-4" />
+                    Call responder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toast.success("Location shared successfully!")}
+                    className="w-full py-3 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <MapPin className="h-4 w-4 text-gray-500" />
+                    Share exact location
+                  </button>
+                </div>
+              </div>
+            )
+          }
 
           // Progress bar width based on status
           const progressWidth = isOnScene ? "w-full" : isDispatched ? "w-3/4" : "w-1/3"
@@ -782,7 +1143,7 @@ export default function UserDashboard() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedEmergency(submittedEmergency)}
+                    onClick={() => setShowDetails(true)}
                     className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#f3f4f6] hover:bg-[#e5e7eb] text-gray-800 font-bold text-xs transition duration-200 cursor-pointer"
                   >
                     <LayoutGrid className="h-4 w-4 shrink-0 text-gray-500" />
@@ -791,71 +1152,90 @@ export default function UserDashboard() {
                 </div>
               </div>
 
-              {/* Dispatch Progress Tracker */}
-              <div className="flex-1 bg-[#fafafa] p-5 overflow-y-auto space-y-4">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Live Dispatch Status</h3>
-
-                <div className="relative pl-6 space-y-6 border-l border-gray-200 ml-2">
-                  {/* Step 1: Received — always complete */}
-                  <div className="relative">
-                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
-                      <CheckCircle className="h-3 w-3" />
-                    </div>
+              {/* Active Emergency Hero Card */}
+              <div className="flex-1 bg-[#fafafa] p-5 overflow-y-auto">
+                <div className="bg-red-600 text-white rounded-3xl p-6 shadow-lg shadow-red-600/20 relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+                  {/* Top Row: Title & Badge */}
+                  <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Emergency report received</h4>
-                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Report registered successfully on Sahayog network</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-red-100 opacity-90">
+                        ACTIVE EMERGENCY
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Step 2: Broadcasted — always complete */}
-                  <div className="relative">
-                    <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
-                      <CheckCircle className="h-3 w-3" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-900 leading-tight">Coordinates broadcasted</h4>
-                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting signal to responders within 3km</p>
-                    </div>
-                  </div>
-
-                  {/* Step 3: Contacting Responders — in-progress when pending, complete when dispatched */}
-                  <div className="relative">
-                    {isDispatched ? (
-                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
-                        <CheckCircle className="h-3 w-3" />
+                    {submittedEmergency?._id && (
+                      <div className="bg-red-700/50 backdrop-blur-xs text-[10px] font-mono font-bold px-2 py-1 rounded-md text-red-100 border border-red-500/30">
+                        #{submittedEmergency._id.slice(-6).toUpperCase()}
                       </div>
-                    ) : (
-                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-yellow-50 border border-yellow-200 text-yellow-600 shadow-xs">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                    )}
+                  </div>
+
+                  {/* Main Content */}
+                  <div className="mb-6">
+                    <h3 className="text-2xl font-black tracking-tight mb-2">
+                      Help is on the way
+                    </h3>
+                    <p className="text-xs text-red-100/90 leading-relaxed font-medium">
+                      Stay where you are and keep your phone nearby. Response team can see your live location.
+                    </p>
+                  </div>
+
+                  {/* 3-step progress indicator */}
+                  <div className="mt-auto">
+                    <div className="relative flex items-center justify-between px-2">
+                      {/* Progress Line Background */}
+                      <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-[3px] bg-red-700/40 rounded-full" />
+                      
+                      {/* Active Progress Line */}
+                      <div 
+                        className="absolute left-6 top-1/2 -translate-y-1/2 h-[3px] bg-white rounded-full transition-all duration-500"
+                        style={{
+                          width: isOnScene ? "calc(100% - 3rem)" : isDispatched ? "calc(50% - 1.5rem)" : "0%"
+                        }}
+                      />
+
+                      {/* Step 1: Reported */}
+                      <div className="relative z-10 flex flex-col items-center">
+                        <div className="h-6 w-6 rounded-full bg-white flex items-center justify-center text-red-600 shadow-sm transition-all duration-300">
+                          <CheckCircle className="h-4 w-4 text-red-600" />
+                        </div>
+                        <span className="text-[10px] font-bold mt-2 text-white">Reported</span>
+                      </div>
+
+                      {/* Step 2: Dispatched */}
+                      <div className="relative z-10 flex flex-col items-center">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center shadow-sm transition-all duration-300 ${
+                          isDispatched 
+                            ? "bg-white text-red-600" 
+                            : "bg-red-700/80 border border-red-500/30 text-red-200"
+                        }`}>
+                          {isDispatched ? (
+                            <CheckCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-red-300" />
+                          )}
+                        </div>
+                        <span className={`text-[10px] font-bold mt-2 ${isDispatched ? "text-white" : "text-red-200/70"}`}>
+                          Dispatched
                         </span>
                       </div>
-                    )}
-                    <div>
-                      <h4 className={`text-xs font-bold leading-tight ${isDispatched ? "text-gray-900" : "text-gray-900"}`}>Contacting nearest responder</h4>
-                      <p className="text-[10px] text-gray-500 font-semibold mt-0.5">
-                        {isDispatched ? "Responder confirmed and accepted the assignment" : "Waiting for available responder confirmation"}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Step 4: Dispatched — pending when searching, complete when assigned */}
-                  <div className="relative">
-                    {isDispatched ? (
-                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-green-500 text-white shadow-xs">
-                        <CheckCircle className="h-3 w-3" />
+                      {/* Step 3: On Scene */}
+                      <div className="relative z-10 flex flex-col items-center">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center shadow-sm transition-all duration-300 ${
+                          isOnScene 
+                            ? "bg-white text-red-600" 
+                            : "bg-red-700/80 border border-red-500/30 text-red-200"
+                        }`}>
+                          {isOnScene ? (
+                            <CheckCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-red-300" />
+                          )}
+                        </div>
+                        <span className={`text-[10px] font-bold mt-2 ${isOnScene ? "text-white" : "text-red-200/70"}`}>
+                          On Scene
+                        </span>
                       </div>
-                    ) : (
-                      <div className="absolute -left-[30px] top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-gray-200 shadow-xs">
-                        <div className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                      </div>
-                    )}
-                    <div>
-                      <h4 className={`text-xs leading-tight ${isDispatched ? "font-bold text-gray-900" : "font-semibold text-gray-400"}`}>Responder dispatched</h4>
-                      <p className={`text-[10px] mt-0.5 ${isDispatched ? "text-gray-500 font-semibold" : "text-gray-400 font-medium"}`}>
-                        {isDispatched ? "Responder is en route to your location" : "Awaiting dispatch confirmation details"}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -868,6 +1248,7 @@ export default function UserDashboard() {
                   onClick={() => {
                     setIsSubmitted(false)
                     setSubmittedEmergency(null)
+                    setShowDetails(false)
                   }}
                   className="w-full inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 text-sm transition-all duration-200 shadow-md shadow-red-500/10 cursor-pointer"
                 >
@@ -943,277 +1324,109 @@ export default function UserDashboard() {
     return renderProfile()
   }
 
-  // --- Dispatched full-page "Help is on the way" view ---
+  if (loading) {
+    return <div>Loading map...</div>
+  }
 
-  if (showDispatchedView) {
-    if (dispatchedStatus === "resolved") {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center font-sans">
-          <div className="bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xl max-w-md w-full space-y-6">
-            <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
-              <CheckCircle className="w-12 h-12" />
+  return (
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+      {/* Map Container */}
+      <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+        {isSubmitted && !isDispatched && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
             </div>
-            <div>
-              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Emergency Resolved</h2>
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-                The rescue team has successfully addressed the emergency and marked the status as resolved.
-              </p>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-gray-900 leading-none">Searching for Responders</span>
+              <span className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting emergency coordinates...</span>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-3.5 text-left text-sm text-slate-600">
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-slate-400">Incident ID</span>
-                <span className="font-bold text-slate-800">INC-{submittedEmergency?._id?.slice(-4).toUpperCase()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-slate-400">Category</span>
-                <span className="font-bold text-slate-800 capitalize">{submittedEmergency?.type}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-slate-400">Status</span>
-                <span className="font-bold text-green-600 flex items-center gap-1.5 bg-green-50 border border-green-200 px-3 py-1 rounded-full text-xs uppercase tracking-wide">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
-                  Resolved
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setIsSubmitted(false);
-                setSubmittedEmergency(null);
-                setSearchParams({ tab: "report" });
-              }}
-              className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-base font-bold transition-all shadow-md hover:shadow-lg cursor-pointer"
-            >
-              Return to Dashboard
-            </button>
           </div>
-        </div>
-      );
-    }
+        )}
 
-    const incidentId = `INC-${submittedEmergency?._id?.slice(-4).toUpperCase() || "0000"}`
-    const emergencyType = submittedEmergency?.type || "general"
-    const reportedTime = submittedEmergency?.createdAt
-      ? new Date(submittedEmergency.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-        " - " +
-        new Date(submittedEmergency.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : "N/A"
-    const isOnScene = ["on_scene", "resolved"].includes(dispatchedStatus)
-    const elapsedMin = String(Math.floor(elapsedTime / 60)).padStart(2, "0")
-    const elapsedSec = String(elapsedTime % 60).padStart(2, "0")
-
-    const responder = submittedEmergency?.assignedResponder
-    const responderName = typeof responder === "object" ? (responder?.name || "Rescue Team") : "Rescue Team"
-    const responderPhone = typeof responder === "object" ? (responder?.phone || "") : ""
-    const responderSkills = typeof responder === "object" ? (responder?.skills || []) : []
-    const responderSkillsFormatted = responderSkills.length > 0 
-      ? responderSkills.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(", ") 
-      : "Emergency Response"
-    const responderType = emergencyType.charAt(0).toUpperCase() + emergencyType.slice(1)
-    const etaMin = typeof responder === "object" && responder?.etaSeconds ? Math.max(1, Math.round(responder.etaSeconds / 60)) : 5
-
-    // Use live responder location if available; otherwise show no marker
-    const responderLat = liveResponderLocation ? liveResponderLocation[0] : null
-    const responderLon = liveResponderLocation ? liveResponderLocation[1] : null
-    const myLat = subLat || userLocation[0]
-    const myLon = subLon || userLocation[1]
-    const mapCenter = (responderLat !== null && responderLon !== null)
-      ? [(responderLat + myLat) / 2, (responderLon + myLon) / 2]
-      : [myLat, myLon]
-
-    return (
-      <div style={{ display: "flex", height: "100vh", background: "#f8f9fb", overflow: "hidden" }}>
-        {/* Left Panel */}
-        <div style={{ width: "420px", minWidth: "320px", maxWidth: "100vw", display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb", background: "#fff", overflowY: "auto", flexShrink: 0 }}>
-
-          {/* Active Emergency Solid Red Card */}
-          <div style={{ margin: "20px 20px 0", background: "#cb2525", borderRadius: "16px", padding: "20px", color: "#fff", boxShadow: "0 4px 20px rgba(203, 37, 37, 0.15)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255, 255, 255, 0.9)" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", display: "inline-block", animation: "pulse 2s infinite" }} />
-                Active Emergency
-              </span>
-              <span style={{ fontSize: "10px", fontWeight: 800, color: "rgba(255, 255, 255, 0.7)", background: "rgba(255, 255, 255, 0.15)", padding: "3px 8px", borderRadius: "6px", letterSpacing: "0.5px" }}>{incidentId}</span>
+        {/* En-route overlay banner — mirrors old full page layout */}
+        {isSubmitted && isDispatched && dispatchedStatus === "en_route" && (
+          <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[1000] flex items-center justify-between shadow-xl animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <MapPin className="text-white w-5 h-5" />
+              </div>
+              <span className="font-extrabold text-sm tracking-wide">Responder is on the way</span>
             </div>
-            
-            <h2 style={{ fontSize: "24px", fontWeight: 900, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.5px" }}>Help is on the way</h2>
-            <p style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.8)", margin: "0 0 24px", lineHeight: 1.5, fontWeight: 500 }}>
-              Stay where you are and keep your phone nearby. Response team can see your live location.
-            </p>
+            <div className="text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg shadow-sm">
+              Tracking live
+            </div>
+          </div>
+        )}
 
-            {/* Premium 3-step progress bar */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", padding: "0 10px" }}>
-              {/* Connector Line Background */}
-              <div style={{ position: "absolute", top: "9px", left: "20px", right: "20px", height: "2px", backgroundColor: "rgba(255, 255, 255, 0.25)", zIndex: 1 }} />
-              {/* Active Connector Line */}
-              <div style={{ position: "absolute", top: "9px", left: "20px", width: isOnScene ? "calc(100% - 40px)" : "calc(50% - 20px)", height: "2px", backgroundColor: "#fff", zIndex: 2 }} />
+        {isSubmitted && isDispatched && dispatchedStatus === "on_scene" && (
+          <div className="absolute top-4 left-4 right-4 bg-green-600/95 backdrop-blur-md text-white border border-green-500/30 p-4 rounded-xl z-[1000] flex items-center gap-3 shadow-xl">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <CheckCircle className="text-white w-5 h-5" />
+            </div>
+            <span className="font-extrabold text-sm tracking-wide">Responder has arrived on scene</span>
+          </div>
+        )}
 
-              {/* Step 1: Reported */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "4px solid #cb2525", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />
-                </div>
-                <span style={{ fontSize: "9px", fontWeight: 700, color: "#fff", marginTop: "6px" }}>Reported</span>
+        {/* Map Legend */}
+        {isSubmitted && isDispatched && (
+          <div style={{ position: "absolute", bottom: "20px", left: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", minWidth: "120px" }}>
+            <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 8px" }}>Live Tracking</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#dc2626" }} />
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>You</span>
               </div>
-
-              {/* Step 2: Responder Dispatched */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "3px solid #cb2525", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 4px rgba(255, 255, 255, 0.25)" }}>
-                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />
-                </div>
-                <span style={{ fontSize: "9px", fontWeight: 700, color: "#fff", marginTop: "6px" }}>Responder Dispatched</span>
-              </div>
-
-              {/* Step 3: On Scene */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3, position: "relative" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: isOnScene ? "#fff" : "rgba(255, 255, 255, 0.45)", border: isOnScene ? "4px solid #cb2525" : "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {isOnScene && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cb2525" }} />}
-                </div>
-                <span style={{ fontSize: "9px", fontWeight: 700, color: isOnScene ? "#fff" : "rgba(255, 255, 255, 0.6)", marginTop: "6px" }}>On Scene</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb" }} />
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>Responder</span>
               </div>
             </div>
           </div>
+        )}
+        <MapComponent center={isSubmitted && isDispatched ? mapCenter : (isSubmitted && subLat && subLon ? [subLat, subLon] : [form.latitude, form.longitude])} zoom={isSubmitted && isDispatched ? 14 : 13}>
+          {/* Capture clicks to set location when reporting tab is open */}
+          {isReporting && (
+            <MapClickHandler onClick={updateFormLocation} />
+          )}
 
-          /* Estimated Arrival + Time Elapsed Grid */
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", padding: "20px" }}>
-            <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Estimated Arrival</p>
-              <p style={{ fontSize: "32px", fontWeight: 900, color: "#111827", margin: 0, lineHeight: 1 }}>
-                {etaMin} <span style={{ fontSize: "14px", fontWeight: 700, color: "#6b7280" }}>min</span>
-              </p>
-            </div>
-            <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 6px" }}>Time Elapsed</p>
-              <p style={{ fontSize: "32px", fontWeight: 900, color: "#111827", margin: 0, lineHeight: 1, fontFamily: "monospace" }}>
-                {elapsedMin}:{elapsedSec}
-              </p>
-            </div>
-          </div>
+          {/* Draggable Reporting Marker & radius overlay */}
+          {isReporting && (
+            <>
+              <Marker
+                position={[form.latitude, form.longitude]}
+                draggable={true}
+                eventHandlers={{
+                  dragend: (event) => {
+                    const marker = event.target
+                    const nextPosition = marker.getLatLng()
+                    updateFormLocation(nextPosition.lat, nextPosition.lng)
+                  },
+                }}
+              />
+            </>
+          )}
 
-          {/* Assigned Responder Card */}
-          <div style={{ margin: "0 20px", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "20px", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-            <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 16px" }}>Assigned Responder</p>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ width: "46px", height: "46px", borderRadius: "12px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <ShieldCheck style={{ width: "24px", height: "24px", color: "#2563eb" }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: "15px", fontWeight: 800, color: "#111827", margin: 0 }}>{responderName}</p>
-                  <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0", fontWeight: 600 }}>{responderSkillsFormatted}</p>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button 
-                  onClick={() => {
-                    if (responderPhone) {
-                      window.location.href = `tel:${responderPhone}`;
-                    } else {
-                      toast.error("Phone number not available");
-                    }
-                  }}
-                  style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
-                >
-                  <PhoneCall style={{ width: "16px", height: "16px" }} />
-                </button>
-                <button 
-                  onClick={() => toast.success(`Opening chat with ${responderName}...`)}
-                  style={{ width: "36px", height: "36px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4b5563" }}
-                >
-                  <MessageSquare style={{ width: "16px", height: "16px" }} />
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: "14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <div>
-                <span style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>Status</span>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: isOnScene ? "#16a34a" : "#16a34a", margin: "2px 0 0" }}>
-                  {isOnScene ? "On scene" : "On the way"}
-                </p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>Type</span>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: "#111827", margin: "2px 0 0", textTransform: "capitalize" }}>{responderType}</p>
-              </div>
-            </div>
-          </div>
+          {/* Nearby Emergency Markers */}
+          {emergencies.map(emergency => (
+            <EmergencyMarker
+              key={emergency._id}
+              emergency={emergency}
+              onClick={setSelectedEmergency}
+            />
+          ))}
 
-          {/* Incident Details Card */}
-          <div style={{ margin: "16px 20px", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "20px", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-            <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 16px" }}>Incident Details</p>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Incident ID</span>
-              <span style={{ fontSize: "12px", fontWeight: 700, color: "#111827" }}>{incidentId}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", alignItems: "center" }}>
-              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Type</span>
-              <span style={{ fontSize: "11px", fontWeight: 800, padding: "3px 12px", borderRadius: "99px", textTransform: "capitalize", background: "#fef2f2", color: "#dc2626", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#dc2626" }} />
-                {emergencyType}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600 }}>Reported</span>
-              <span style={{ fontSize: "12px", fontWeight: 700, color: "#111827" }}>{reportedTime}</span>
-            </div>
-          </div>
+          {/* Nearby Responder Markers */}
+          {responders.map(responder => (
+            <ResponderMarker
+              key={responder._id}
+              responder={responder}
+            />
+          ))}
 
-          {/* Actions panel */}
-          <div style={{ padding: "0 20px 20px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
-            <button
-              type="button"
-              onClick={() => {
-                if (responderPhone) {
-                  window.location.href = `tel:${responderPhone}`;
-                } else {
-                  toast.error("Phone number not available");
-                }
-              }}
-              style={{ width: "100%", padding: "14px", borderRadius: "12px", background: "#2563eb", color: "#fff", fontSize: "14px", fontWeight: 800, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 2px 10px rgba(37, 99, 235, 0.15)" }}
-            >
-              <PhoneCall style={{ width: "16px", height: "16px" }} />
-              Call responder
-            </button>
-            <button
-              type="button"
-              onClick={() => toast.success("Location shared successfully!")}
-              style={{ width: "100%", padding: "12px", borderRadius: "12px", background: "#fff", color: "#4b5563", fontSize: "12px", fontWeight: 700, border: "1px solid #e5e7eb", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-            >
-              <MapPin style={{ width: "14px", height: "14px", color: "#6b7280" }} />
-              Share exact location
-            </button>
-          </div>
-        </div>
-
-        {/* Right Panel — Live Tracking Map */}
-        <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
-          {/* Map Header matching mock */}
-          <div style={{ padding: "18px 24px", background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-            <div>
-              <h3 style={{ fontSize: "16px", fontWeight: 900, color: "#111827", margin: 0, letterSpacing: "-0.3px" }}>Live Tracking</h3>
-              <p style={{ fontSize: "12px", color: "#6b7280", margin: "2px 0 0", fontWeight: 500 }}>Updates every 10 seconds</p>
-            </div>
-            
-            {/* Header Right Connection Info & Avatar */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#16a34a" }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a" }} />
-              Connected
-            </span>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#4b5563" }}>Location Enabled</span>
-              
-              {/* Small User Photo/Avatar */}
-              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#cbd5e1", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
-                <span style={{ color: "#334155", fontWeight: 800, fontSize: "12px" }}>{user?.name?.charAt(0).toUpperCase()}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Map Layout */}
-          <div style={{ flex: 1, position: "relative" }}>
-            <MapComponent center={mapCenter} zoom={14}>
-
+          {isSubmitted && isDispatched && (
+            <>
               {/* Responder marker — hidden when animated route marker is active */}
               {liveResponderLocation && dispatchedStatus !== "en_route" && (
                 <ResponderMarker
@@ -1257,111 +1470,10 @@ export default function UserDashboard() {
                   isAvailable={false}
                 />
               )}
-            </MapComponent>
-
-            {/* En-route overlay banner — mirrors Responder Dashboard */}
-            {dispatchedStatus === "en_route" ? (
-              <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[400] flex items-center justify-between shadow-xl animate-pulse">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                    <MapPin className="text-white w-5 h-5" />
-                  </div>
-                  <span className="font-extrabold text-sm tracking-wide">Responder is on the way</span>
-                </div>
-                <div className="text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg shadow-sm">
-                  Tracking live
-                </div>
-              </div>
-            ) : dispatchedStatus === "on_scene" ? (
-              <div className="absolute top-4 left-4 right-4 bg-green-600/95 backdrop-blur-md text-white border border-green-500/30 p-4 rounded-xl z-[400] flex items-center gap-3 shadow-xl">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <CheckCircle className="text-white w-5 h-5" />
-                </div>
-                <span className="font-extrabold text-sm tracking-wide">Responder has arrived on scene</span>
-              </div>
-            ) : null}
-
-            {/* Map Legend */}
-            <div style={{ position: "absolute", bottom: "20px", left: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", minWidth: "120px" }}>
-              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 8px" }}>Live Tracking</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#dc2626" }} />
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>You</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb" }} />
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>Responder</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return <div>Loading map...</div>
-  }
-
-  return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      {/* Map Container */}
-      <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-        {isSubmitted && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
-            <div className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900 leading-none">Searching for Responders</span>
-              <span className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting emergency coordinates...</span>
-            </div>
-          </div>
-        )}
-        <MapComponent center={isSubmitted && subLat && subLon ? [subLat, subLon] : [form.latitude, form.longitude]} zoom={13}>
-          {/* Capture clicks to set location when reporting tab is open */}
-          {isReporting && (
-            <MapClickHandler onClick={updateFormLocation} />
-          )}
-
-          {/* Draggable Reporting Marker & radius overlay */}
-          {isReporting && (
-            <>
-              <Marker
-                position={[form.latitude, form.longitude]}
-                draggable={true}
-                eventHandlers={{
-                  dragend: (event) => {
-                    const marker = event.target
-                    const nextPosition = marker.getLatLng()
-                    updateFormLocation(nextPosition.lat, nextPosition.lng)
-                  },
-                }}
-              />
             </>
           )}
 
-          {/* Nearby Emergency Markers */}
-          {emergencies.map(emergency => (
-            <EmergencyMarker
-              key={emergency._id}
-              emergency={emergency}
-              onClick={setSelectedEmergency}
-            />
-          ))}
-
-          {/* Nearby Responder Markers */}
-          {responders.map(responder => (
-            <ResponderMarker
-              key={responder._id}
-              responder={responder}
-            />
-          ))}
-
-          {isSubmitted && submittedEmergency && subLat && subLon && (
+          {isSubmitted && submittedEmergency && subLat && subLon && !isDispatched && (
             <>
               <ChangeMapView center={[subLat, subLon]} />
               {/* Outer pulsing red circle */}
@@ -1481,48 +1593,7 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* Selected Emergency Details Modal */}
-      {selectedEmergency && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: "white",
-            padding: "2rem",
-            borderRadius: "8px",
-            minWidth: "400px",
-            maxWidth: "500px"
-          }}>
-            <h2 className="font-bold text-lg mb-2">{selectedEmergency.type.toUpperCase()}</h2>
-            <p className="text-sm text-gray-700 mb-3">{selectedEmergency.description}</p>
-            <p className="text-xs text-gray-500 mb-1"><strong>Status:</strong> {selectedEmergency.status}</p>
-            <p className="text-xs text-gray-500 mb-4"><strong>Responders Assigned:</strong> {selectedEmergency.responders?.length || 0}</p>
-            <button
-              type="button"
-              onClick={() => setSelectedEmergency(null)}
-              style={{
-                padding: "0.5rem 1rem",
-                background: "#666",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }
