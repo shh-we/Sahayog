@@ -1372,7 +1372,7 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* En-route overlay banner — mirrors old full page layout */}
+        {/* En-route overlay banner */}
         {isSubmitted && isDispatched && dispatchedStatus === "en_route" && (
           <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[1000] flex items-center justify-between shadow-xl animate-pulse">
             <div className="flex items-center gap-3">
@@ -1413,12 +1413,10 @@ export default function UserDashboard() {
           </div>
         )}
         <MapComponent center={isSubmitted && isDispatched ? mapCenter : (isSubmitted && subLat && subLon ? [subLat, subLon] : [form.latitude, form.longitude])} zoom={isSubmitted && isDispatched ? 14 : 13}>
-          {/* Capture clicks to set location when reporting tab is open */}
           {isReporting && (
             <MapClickHandler onClick={updateFormLocation} />
           )}
 
-          {/* Draggable Reporting Marker & radius overlay */}
           {isReporting && (
             <>
               <Marker
@@ -1435,7 +1433,6 @@ export default function UserDashboard() {
             </>
           )}
 
-          {/* Nearby Emergency Markers */}
           {emergencies.map(emergency => (
             <EmergencyMarker
               key={emergency._id}
@@ -1444,7 +1441,6 @@ export default function UserDashboard() {
             />
           ))}
 
-          {/* Nearby Responder Markers */}
           {responders.map(responder => (
             <ResponderMarker
               key={responder._id}
@@ -1454,7 +1450,6 @@ export default function UserDashboard() {
 
           {isSubmitted && isDispatched && (
             <>
-              {/* Responder marker — hidden when animated route marker is active */}
               {liveResponderLocation && dispatchedStatus !== "en_route" && (
                 <ResponderMarker
                   responder={{
@@ -1465,7 +1460,6 @@ export default function UserDashboard() {
                 />
               )}
 
-              {/* User Location Target Marker */}
               <Marker
                 position={[myLat, myLon]}
                 icon={L.divIcon({
@@ -1483,7 +1477,6 @@ export default function UserDashboard() {
                 })}
               />
 
-              {/* Animated route layer — uses synchronized Mode B if route sync state exists */}
               {liveResponderLocation && (
                 <ActiveRouteLayer
                   responderCoords={[responderLat, responderLon]}
@@ -1498,7 +1491,6 @@ export default function UserDashboard() {
                 />
               )}
 
-              {/* Facility route: shown after responder arrives on scene */}
               {facilityRoutePath && (dispatchedStatus === "on_scene" || dispatchedStatus === "resolved") && (
                 <AStarRoutePolyline
                   path={facilityRoutePath}
@@ -1507,90 +1499,6 @@ export default function UserDashboard() {
                   visible={true}
                 />
               )}
-            </MapComponent>
-
-            {/* En-route overlay banner — mirrors Responder Dashboard */}
-            {dispatchedStatus === "en_route" ? (
-              <div className="absolute top-4 left-4 right-4 bg-blue-600/95 backdrop-blur-md text-white border border-blue-500/30 p-4 rounded-xl z-[400] flex items-center justify-between shadow-xl animate-pulse">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                    <MapPin className="text-white w-5 h-5" />
-                  </div>
-                  <span className="font-extrabold text-sm tracking-wide">Responder is on the way</span>
-                </div>
-                <div className="text-sm font-bold bg-white/20 px-3 py-1.5 rounded-lg shadow-sm">
-                  Tracking live
-                </div>
-              </div>
-            ) : dispatchedStatus === "on_scene" ? (
-              <div className="absolute top-4 left-4 right-4 bg-green-600/95 backdrop-blur-md text-white border border-green-500/30 p-4 rounded-xl z-[400] flex items-center gap-3 shadow-xl">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <CheckCircle className="text-white w-5 h-5" />
-                </div>
-                <span className="font-extrabold text-sm tracking-wide">Responder has arrived on scene</span>
-              </div>
-            ) : null}
-
-            {/* Map Legend */}
-            <div style={{ position: "absolute", bottom: "20px", left: "20px", zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", minWidth: "120px" }}>
-              <p style={{ fontSize: "9px", fontWeight: 800, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 8px" }}>Live Tracking</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#dc2626" }} />
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>You</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb" }} />
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151" }}>Responder</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return <div>Loading map...</div>
-  }
-
-  return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      {/* Map Container */}
-      <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-        {isSubmitted && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
-            <div className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900 leading-none">Searching for Responders</span>
-              <span className="text-[10px] text-gray-500 font-semibold mt-0.5">Broadcasting emergency coordinates...</span>
-            </div>
-          </div>
-        )}
-        <MapComponent center={isSubmitted && subLat && subLon ? [subLat, subLon] : [form.latitude, form.longitude]} zoom={13}>
-          {/* Capture clicks to set location when reporting tab is open */}
-          {isReporting && (
-            <MapClickHandler onClick={updateFormLocation} />
-          )}
-
-          {/* Draggable Reporting Marker & radius overlay */}
-          {isReporting && (
-            <>
-              <Marker
-                position={[form.latitude, form.longitude]}
-                draggable={true}
-                eventHandlers={{
-                  dragend: (event) => {
-                    const marker = event.target
-                    const nextPosition = marker.getLatLng()
-                    updateFormLocation(nextPosition.lat, nextPosition.lng)
-                  },
-                }}
-              />
             </>
           )}
 

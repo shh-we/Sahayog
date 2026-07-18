@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect, useRef, useMemo } from "react"
 import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
@@ -24,7 +23,6 @@ import {
 } from "lucide-react"
 
 export default function AdminDashboard() {
-  const navigate = useNavigate()
   const [emergencies, setEmergencies] = useState([])
   const [responders, setResponders] = useState([])
   const [stats, setStats] = useState({
@@ -217,24 +215,19 @@ export default function AdminDashboard() {
     }
   }, [socket, emergencies])
 
-  // Sync / cleanup live responder locations state when an emergency goes out of tracking scope
-  useEffect(() => {
+  const cleanLiveResponderLocations = useMemo(() => {
     const trackableIds = emergencies
       .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && e.assignedResponder)
       .map(e => e._id)
 
-    setLiveResponderLocations(prev => {
-      const next = { ...prev }
-      let changed = false
-      Object.keys(next).forEach(id => {
-        if (!trackableIds.includes(id)) {
-          delete next[id]
-          changed = true
-        }
-      })
-      return changed ? next : prev
+    const next = {}
+    Object.keys(liveResponderLocations).forEach(id => {
+      if (trackableIds.includes(id)) {
+        next[id] = liveResponderLocations[id]
+      }
     })
-  }, [emergencies])
+    return next
+  }, [emergencies, liveResponderLocations])
 
   if (loading) {
     return (
@@ -480,9 +473,9 @@ export default function AdminDashboard() {
 
                   {/* Assigned Responder Live-Location Markers */}
                   {emergencies
-                    .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && liveResponderLocations[e._id])
+                    .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && cleanLiveResponderLocations[e._id])
                     .map(emergency => {
-                      const coords = liveResponderLocations[emergency._id]
+                      const coords = cleanLiveResponderLocations[emergency._id]
                       const responderDetails = getAssignedResponderDetails(emergency)
                       return (
                         <ResponderMarker
