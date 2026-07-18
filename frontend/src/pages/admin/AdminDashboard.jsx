@@ -39,6 +39,8 @@ export default function AdminDashboard() {
   const [time, setTime] = useState("")
   const [mapFilter, setMapFilter] = useState("all")
   const mapRef = useRef(null)
+  const [liveResponderLocations, setLiveResponderLocations] = useState({})
+  const joinedRooms = useRef(new Set())
 
   const getRelativeTime = (date) => {
     const now = new Date()
@@ -145,28 +147,94 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!socket) return
 
-    // Admin receives these only via the emergency room joined by useEmergencyRoom above
-    // (when selectedEmergency is set). Feature 5 does not publish any global feed.
+    // Active trackable emergencies: status is active, assigned, en_route, or on_scene
+    const activeEmergencies = emergencies.filter(e =>
+      ["active", "assigned", "en_route", "on_scene"].includes(e.status)
+    )
 
-    // emergency:statusUpdate — status change in the currently selected emergency.
-    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
-      setEmergencies(prev =>
-        prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status } : e)
-      )
+    // Join rooms dynamically for newly trackable emergencies
+    activeEmergencies.forEach(e => {
+      if (!joinedRooms.current.has(e._id)) {
+        socket.emit("emergency:join", e._id, (res) => {
+          if (res && res.ok) {
+            joinedRooms.current.add(e._id)
+            console.log(`[Admin] Successfully joined room for emergency: ${e._id}`)
+          }
+        })
+      }
     })
 
-    // responder:assigned — a responder was confirmed on the selected emergency.
-    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, (data) => {
+    // Prune rooms that are no longer active
+    const activeIds = activeEmergencies.map(e => e._id)
+    joinedRooms.current.forEach(id => {
+      if (!activeIds.includes(id)) {
+        joinedRooms.current.delete(id)
+      }
+    })
+
+    const handleStatusUpdate = (data) => {
+      console.log("[Admin] Received emergency status update:", data)
+      setEmergencies(prev =>
+        prev.map(e => e._id === data.emergencyId ? { ...e, status: data.status, responderStatus: data.responderStatus || e.responderStatus } : e)
+      )
+    }
+
+    const handleResponderAssigned = (data) => {
+      console.log("[Admin] Received responder assigned:", data)
       setEmergencies(prev =>
         prev.map(e => e._id === data.emergencyId ? { ...e, status: "assigned", assignedResponder: data.responderId } : e)
       )
-    })
+    }
+
+    const handleResponderLocation = (data) => {
+      console.log("[Admin] Received responder location update:", data)
+      if (data && data.emergencyId && Array.isArray(data.coordinates) && data.coordinates.length === 2) {
+        // Find corresponding emergency in state to verify responder
+        const emergency = emergencies.find(e => e._id === data.emergencyId)
+        if (emergency && ["assigned", "en_route", "on_scene"].includes(emergency.status)) {
+          const assignedId = typeof emergency.assignedResponder === 'object'
+            ? emergency.assignedResponder?._id
+            : emergency.assignedResponder
+
+          if (assignedId && String(assignedId) === String(data.responderId)) {
+            setLiveResponderLocations(prev => ({
+              ...prev,
+              [data.emergencyId]: [data.coordinates[1], data.coordinates[0]] // [latitude, longitude]
+            }))
+          }
+        }
+      }
+    }
+
+    socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, handleStatusUpdate)
+    socket.on(SOCKET_EVENTS.RESPONDER_ASSIGNED, handleResponderAssigned)
+    socket.on(SOCKET_EVENTS.RESPONDER_LOCATION, handleResponderLocation)
 
     return () => {
-      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
-      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
+      socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, handleStatusUpdate)
+      socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED, handleResponderAssigned)
+      socket.off(SOCKET_EVENTS.RESPONDER_LOCATION, handleResponderLocation)
     }
-  }, [socket])
+  }, [socket, emergencies])
+
+  // Sync / cleanup live responder locations state when an emergency goes out of tracking scope
+  useEffect(() => {
+    const trackableIds = emergencies
+      .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && e.assignedResponder)
+      .map(e => e._id)
+
+    setLiveResponderLocations(prev => {
+      const next = { ...prev }
+      let changed = false
+      Object.keys(next).forEach(id => {
+        if (!trackableIds.includes(id)) {
+          delete next[id]
+          changed = true
+        }
+      })
+      return changed ? next : prev
+    })
+  }, [emergencies])
 
   if (loading) {
     return (
@@ -191,6 +259,22 @@ export default function AdminDashboard() {
       mapCenter = [avgLat, avgLng]
     }
   }
+
+  const getAssignedResponderDetails = (emergency) => {
+    const responderId = typeof emergency.assignedResponder === 'object'
+      ? emergency.assignedResponder?._id
+      : emergency.assignedResponder;
+
+    if (!responderId) return null;
+
+    const found = responders.find(r => r._id === responderId);
+    return found || { _id: responderId, name: "Assigned Responder", skills: [] };
+  }
+
+  const activeResponderIds = emergencies
+    .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && e.assignedResponder)
+    .map(e => typeof e.assignedResponder === 'object' ? e.assignedResponder?._id : e.assignedResponder)
+    .filter(Boolean)
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 p-6 space-y-6 pb-10">
@@ -358,33 +442,60 @@ export default function AdminDashboard() {
                   zoom={12}
                   mapRef={mapRef}
                   showZoomControls={false}
+                  recenterOnPropChange={false}
                 >
                   {/* Emergency Markers */}
                   {(mapFilter === "all" || mapFilter === "incidents") &&
-                    emergencies.map(emergency => (
-                      <EmergencyMarker
-                        key={emergency._id}
-                        emergency={emergency}
-                        onClick={setSelectedEmergency}
-                      />
-                    ))
+                    emergencies
+                      .filter(e => ["active", "assigned", "en_route", "on_scene"].includes(e.status))
+                      .map(emergency => (
+                        <EmergencyMarker
+                          key={emergency._id}
+                          emergency={emergency}
+                          onClick={setSelectedEmergency}
+                        />
+                      ))
                   }
 
                   {/* Responder Markers */}
                   {((mapFilter === "all" || mapFilter === "responders") &&
-                    responders.map(responder => (
-                      <ResponderMarker
-                        key={responder._id}
-                        responder={responder}
-                      />
-                    ))) ||
+                    responders
+                      .filter(r => !activeResponderIds.includes(r._id))
+                      .map(responder => (
+                        <ResponderMarker
+                          key={responder._id}
+                          responder={responder}
+                        />
+                      ))) ||
                     (mapFilter === "available" &&
-                    responders.filter(r => r.isAvailable).map(responder => (
-                      <ResponderMarker
-                        key={responder._id}
-                        responder={responder}
-                      />
-                    )))
+                    responders
+                      .filter(r => r.isAvailable && !activeResponderIds.includes(r._id))
+                      .map(responder => (
+                        <ResponderMarker
+                          key={responder._id}
+                          responder={responder}
+                        />
+                      )))
+                  }
+
+                  {/* Assigned Responder Live-Location Markers */}
+                  {emergencies
+                    .filter(e => ["assigned", "en_route", "on_scene"].includes(e.status) && liveResponderLocations[e._id])
+                    .map(emergency => {
+                      const coords = liveResponderLocations[emergency._id]
+                      const responderDetails = getAssignedResponderDetails(emergency)
+                      return (
+                        <ResponderMarker
+                          key={`live-responder-${emergency._id}`}
+                          responder={{
+                            location: { coordinates: [coords[1], coords[0]] },
+                            name: responderDetails?.name || "Assigned Responder",
+                            isAvailable: false,
+                            skills: responderDetails?.skills || []
+                          }}
+                        />
+                      )
+                    })
                   }
                 </MapComponent>
               </div>
@@ -453,14 +564,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          <div className="p-3 border-t border-gray-100 shrink-0">
-            <button
-              onClick={() => navigate(`${ADMIN_DASHBOARD}?tab=emergencies`)}
-              className="w-full text-center py-2 text-xs font-bold text-[#1f73b7] hover:text-[#1a629b] transition-colors flex items-center justify-center gap-1"
-            >
-              <span>View all emergencies →</span>
-            </button>
-          </div>
+
         </div>
       </div>
 
