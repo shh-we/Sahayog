@@ -1329,9 +1329,9 @@ export default function UserDashboard() {
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden relative">
       {/* Map Container */}
-      <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+      <div className="flex-none h-[45vh] md:h-auto md:flex-1 relative min-w-0">
         {isSubmitted && !isDispatched && (
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur-md border border-red-100 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
             <div className="relative flex h-3 w-3">
@@ -1556,16 +1556,7 @@ export default function UserDashboard() {
       </div>
 
       {/* Sidebar - Form Panel and Views */}
-      <div style={{
-        width: "clamp(300px, 30vw, 420px)",
-        borderLeft: "1px solid #e5e7eb",
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        overflowY: "hidden",
-        background: "#fafafa",
-        flexShrink: 0,
-      }}>
+      <div className="w-full md:w-[clamp(300px,30vw,420px)] border-t md:border-t-0 md:border-l border-gray-200 flex flex-col flex-1 md:h-[100dvh] overflow-y-hidden bg-[#fafafa] shrink-0">
         {/* Tab switch bar for main dashboard actions */}
         {(!activeTab || ["report", "alerts", "responders"].includes(activeTab)) && (
           <div className="flex border-b border-gray-200 bg-white shrink-0">
