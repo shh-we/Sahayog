@@ -221,7 +221,7 @@ export async function declineDispatchAttempt(attemptId) {
   const attempt = await deps.DispatchAttempt.findOneAndUpdate(
     { _id: attemptId, status: "pending" },
     { status: "declined", respondedAt: new Date() },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!attempt) {
@@ -264,7 +264,7 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
       expiresAt: { $gt: now }
     },
     { status: "accepted", respondedAt: now },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!attempt) {
@@ -283,7 +283,7 @@ export async function acceptDispatchAttempt(attemptId, responderId) {
       dispatchStatus: "assigned",
       assignedResponder: responderId
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!emergency) {

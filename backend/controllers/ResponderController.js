@@ -57,7 +57,7 @@ export async function acceptEmergency(req, res) {
         dispatchStatus: "assigned",
         assignedResponder: responderId
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!emergency) {

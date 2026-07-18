@@ -20,3 +20,15 @@
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
 }
+
+.astar-route-badge.leaflet-tooltip {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+.astar-route-badge.leaflet-tooltip::before {
+  display: none;
+}

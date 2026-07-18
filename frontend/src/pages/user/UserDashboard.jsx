@@ -5,10 +5,11 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import EmergencyFormPanel from "../../components/emergency/EmergencyFormPanel.jsx"
-import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
+   import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
+   import AStarRoutePolyline from "../../components/map/AStarRoutePolyline.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
-import { getNearbyEmergencies, createEmergency, deleteEmergency } from "../../api/emergency.js"
+   import { getNearbyEmergencies, createEmergency, deleteEmergency, getIncidentToFacilityRoute } from "../../api/emergency.js"
 import { getNearbyResponders } from "../../api/responder.js"
 import { Marker, Circle, useMapEvents, useMap, Polyline } from "react-leaflet"
 import L from "leaflet"
@@ -74,22 +75,25 @@ export default function UserDashboard() {
   const [dispatchedAt, setDispatchedAt] = useState(null)
   const [elapsedTime, setElapsedTime] = useState(0)
 
-  const [liveResponderLocation, setLiveResponderLocation] = useState(null)
-  const [syncRouteCoordinates, setSyncRouteCoordinates] = useState(null)
-  const [syncJourneyStartedAt, setSyncJourneyStartedAt] = useState(null)
+    const [liveResponderLocation, setLiveResponderLocation] = useState(null)
+    const [syncRouteCoordinates, setSyncRouteCoordinates] = useState(null)
+    const [syncJourneyStartedAt, setSyncJourneyStartedAt] = useState(null)
+    const [facilityRoutePath, setFacilityRoutePath] = useState(null)
+    const [facilityRouteSource, setFacilityRouteSource] = useState(null)
   const currentEmergencyRef = useRef(null)
   currentEmergencyRef.current = submittedEmergency || selectedEmergency
 
-  useEffect(() => {
-    setLiveResponderLocation(null)
-    if (submittedEmergency) {
-      setSyncRouteCoordinates(submittedEmergency.routeCoordinates || null)
-      setSyncJourneyStartedAt(submittedEmergency.journeyStartedAt || null)
-    } else {
-      setSyncRouteCoordinates(null)
-      setSyncJourneyStartedAt(null)
-    }
-  }, [submittedEmergency?._id])
+    useEffect(() => {
+      setLiveResponderLocation(null)
+      setFacilityRoutePath(null)
+      if (submittedEmergency) {
+        setSyncRouteCoordinates(submittedEmergency.routeCoordinates || null)
+        setSyncJourneyStartedAt(submittedEmergency.journeyStartedAt || null)
+      } else {
+        setSyncRouteCoordinates(null)
+        setSyncJourneyStartedAt(null)
+      }
+    }, [submittedEmergency?._id])
 
   const subLat = submittedEmergency?.reporterLocation?.coordinates?.[1] || null
   const subLon = submittedEmergency?.reporterLocation?.coordinates?.[0] || null
@@ -245,10 +249,27 @@ export default function UserDashboard() {
       setEmergencies(prev =>
         prev.map(e => e._id === data.emergencyId ? { ...e, status: nextStatus } : e)
       )
-      // Also update submittedEmergency if it matches
       setSubmittedEmergency(prev =>
         prev && prev._id === data.emergencyId ? { ...prev, status: nextStatus } : prev
       )
+
+      // Fetch facility route when responder arrives on scene
+      if (data.responderStatus === "on_scene" && currentEmergencyRef.current?._id) {
+        const eid = currentEmergencyRef.current._id
+        getIncidentToFacilityRoute(eid)
+          .then(res => {
+            if (res.data && res.data.success && res.data.geometry) {
+              console.log(`[UserDashboard][${eid}] Facility route received: source=${res.data.source} geometryLen=${res.data.geometry.length} distance=${res.data.distanceMeters}m facility=${res.data.facility?.name || 'unknown'}`)
+              setFacilityRoutePath(res.data.geometry)
+              setFacilityRouteSource(res.data.source || 'unknown')
+            } else {
+              console.warn(`[UserDashboard][${eid}] Facility route response missing geometry:`, res.data)
+            }
+          })
+          .catch(err => {
+            console.error(`[UserDashboard][${eid}] Facility route fetch failed:`, err?.message || err)
+          })
+      }
     })
 
     // responder:location — live coordinate update of assigned responder
@@ -272,8 +293,9 @@ export default function UserDashboard() {
 
     // journey:started — receive pre-calculated route and start timestamp for synchronized animation
     socket.on(SOCKET_EVENTS.JOURNEY_STARTED, (data) => {
-      console.log("[UserDashboard] Received journey start:", data)
-      if (data.emergencyId === currentEmergencyRef.current?._id) {
+      const eid = data.emergencyId
+      console.log(`[UserDashboard][${eid}] Received journey start: source=${data.routeSource || 'unknown'} coordsLen=${data.routeCoordinates?.length || 0}`)
+      if (eid === currentEmergencyRef.current?._id) {
         setSyncRouteCoordinates(data.routeCoordinates)
         setSyncJourneyStartedAt(data.journeyStartedAt)
       }
@@ -283,6 +305,7 @@ export default function UserDashboard() {
       socket.off(SOCKET_EVENTS.RESPONDER_ASSIGNED)
       socket.off(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE)
       socket.off(SOCKET_EVENTS.RESPONDER_LOCATION)
+      socket.off(SOCKET_EVENTS.JOURNEY_STARTED)
     }
   }, [socket, user?.id])
 
@@ -1255,6 +1278,16 @@ export default function UserDashboard() {
                   showRoute={dispatchedStatus === "en_route"}
                   responderName="Responder"
                   isAvailable={false}
+                />
+              )}
+
+              {/* Facility route: shown after responder arrives on scene */}
+              {facilityRoutePath && (dispatchedStatus === "on_scene" || dispatchedStatus === "resolved") && (
+                <AStarRoutePolyline
+                  path={facilityRoutePath}
+                  variant="facility"
+                  source={facilityRouteSource}
+                  visible={true}
                 />
               )}
             </MapComponent>

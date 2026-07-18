@@ -7,6 +7,7 @@ import MapComponent from "../../components/map/MapComponent.jsx"
 import EmergencyMarker from "../../components/map/EmergencyMarker.jsx"
 import ResponderMarker from "../../components/map/ResponderMarker.jsx"
 import ActiveRouteLayer from "../../components/map/ActiveRouteLayer.jsx"
+import AStarRoutePolyline from "../../components/map/AStarRoutePolyline.jsx"
 import { useSocketInstance, SOCKET_EVENTS } from "../../sockets/socketContext.js"
 import { useEmergencyRoom } from "../../hooks/useEmergencyRoom.js"
 import { getEmergencyById } from "../../api/emergency.js"
@@ -20,6 +21,7 @@ import {
 } from "../../api/responder.js"
 import { HOME_ROUTE } from "../../constants/routes.js"
 import { getDrivingRoute } from "../../api/routing.js"
+import { getResponderToIncidentRoute, getIncidentToFacilityRoute } from "../../api/emergency.js"
 import toast from "react-hot-toast"
 import {
   AlertCircle,
@@ -65,6 +67,10 @@ export default function ResponderDashboard() {
   
   // Throttled animated location for smooth visual updates on dashboard text overlays
   const [throttledLocation, setThrottledLocation] = useState(null)
+
+  // Facility route (incident → hospital/police) shown after on_scene
+  const [facilityRoutePath, setFacilityRoutePath] = useState(null)
+  const [facilityRouteSource, setFacilityRouteSource] = useState(null)
 
   // Dispatch Offer States
   const [currentOffer, setCurrentOffer] = useState(null)
@@ -210,6 +216,28 @@ export default function ResponderDashboard() {
 
     socket.on(SOCKET_EVENTS.EMERGENCY_STATUS_UPDATE, (data) => {
       console.log("[ResponderDashboard] Socket emergency:statusUpdate:", data)
+
+      // Fetch facility route when responder arrives on scene
+      if (data.responderStatus === "on_scene" && data.emergencyId) {
+        getIncidentToFacilityRoute(data.emergencyId)
+          .then(res => {
+            if (res.data && res.data.success && res.data.geometry) {
+              console.log(`[ResponderDashboard][${data.emergencyId}] Facility route received: source=${res.data.source} geometryLen=${res.data.geometry.length} facility=${res.data.facility?.name || 'unknown'}`)
+              setFacilityRoutePath(res.data.geometry)
+              setFacilityRouteSource(res.data.source || 'unknown')
+            }
+          })
+          .catch(err => {
+            console.error(`[ResponderDashboard][${data.emergencyId}] Facility route fetch failed:`, err?.message || err)
+          })
+      }
+
+      // Clear facility route when emergency resolves
+      if (data.status === "resolved") {
+        setFacilityRoutePath(null)
+        setFacilityRouteSource(null)
+      }
+
       fetchActiveAssignments()
     })
 
@@ -266,6 +294,12 @@ export default function ResponderDashboard() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAssignment?.responderStatus, activeAssignment?._id])
+
+  // Reset facility route when switching to a different emergency
+  useEffect(() => {
+    setFacilityRoutePath(null)
+    setFacilityRouteSource(null)
+  }, [activeAssignment?._id])
 
   // Animation and movement are now handled directly inside ActiveRouteLayer to keep UI smooth
 
@@ -339,30 +373,48 @@ export default function ResponderDashboard() {
       let journeyData = {}
       if (nextStatus === 'en_route') {
         let routeCoords = []
+        let routeSource = 'none'
         try {
-          const [rLat, rLon] = responderLocation
-          const targetAssignment = assignments.find(a => a._id === emergencyId) || activeAssignment
-          const eCoords = targetAssignment?.reporterLocation?.coordinates
-          if (!eCoords || eCoords.length < 2) {
-            throw new Error("Target assignment coordinates not found")
+          // Try A* route first
+          const astarRes = await getResponderToIncidentRoute(emergencyId)
+          if (astarRes.data && astarRes.data.success && astarRes.data.geometry) {
+            routeCoords = astarRes.data.geometry.map(coord => [coord[1], coord[0]])
+            routeSource = astarRes.data.source || 'astar'
+            console.log(`[ResponderDashboard][${emergencyId}] A* route received: source=${routeSource} geometryLen=${routeCoords.length}`)
+          } else {
+            console.warn(`[ResponderDashboard][${emergencyId}] A* route response missing geometry:`, astarRes.data)
           }
-          const [eLon, eLat] = eCoords
-          const res = await getDrivingRoute({
-            fromLat: rLat,
-            fromLng: rLon,
-            toLat: eLat,
-            toLng: eLon
-          })
-          if (res.data && res.data.success && res.data.geometry) {
-            routeCoords = res.data.geometry.map(coord => [coord[1], coord[0]])
+        } catch {
+          // A* route failed, fall back to OSRM
+          console.warn(`[ResponderDashboard][${emergencyId}] A* route endpoint failed, falling back to OSRM...`)
+          try {
+            const [rLat, rLon] = responderLocation
+            const targetAssignment = assignments.find(a => a._id === emergencyId) || activeAssignment
+            const eCoords = targetAssignment?.reporterLocation?.coordinates
+            if (!eCoords || eCoords.length < 2) {
+              throw new Error("Target assignment coordinates not found")
+            }
+            const [eLon, eLat] = eCoords
+            const res = await getDrivingRoute({
+              fromLat: rLat,
+              fromLng: rLon,
+              toLat: eLat,
+              toLng: eLon
+            })
+            if (res.data && res.data.success && res.data.geometry) {
+              routeCoords = res.data.geometry.map(coord => [coord[1], coord[0]])
+              routeSource = 'osrm'
+              console.log(`[ResponderDashboard][${emergencyId}] OSRM fallback route received: geometryLen=${routeCoords.length}`)
+            }
+          } catch (err) {
+            console.error(`[ResponderDashboard][${emergencyId}] OSRM fallback also failed:`, err)
+            toast.error("Road route is temporarily unavailable; location sharing continues.")
           }
-        } catch (err) {
-          console.error("Failed to fetch route for sync:", err)
-          toast.error("Road route is temporarily unavailable; location sharing continues.")
         }
         journeyData = {
           routeCoordinates: routeCoords,
-          journeyStartedAt: new Date().toISOString()
+          journeyStartedAt: new Date().toISOString(),
+          routeSource
         }
       }
 
@@ -746,6 +798,16 @@ export default function ResponderDashboard() {
                 );
               }}
             />
+
+            {/* Facility route: shown after responder arrives on scene */}
+            {facilityRoutePath && (statusVal === "on_scene" || statusVal === "completed") && (
+              <AStarRoutePolyline
+                path={facilityRoutePath}
+                variant="facility"
+                source={facilityRouteSource}
+                visible={true}
+              />
+            )}
           </MapComponent>
 
           {/* Map Overlays */}

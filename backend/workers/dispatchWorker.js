@@ -49,7 +49,7 @@ export async function runExpirySweep() {
     const updated = await deps.DispatchAttempt.findOneAndUpdate(
       { _id: attempt._id, status: "pending" },
       { status: "expired" },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updated) continue; // already handled

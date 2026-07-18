@@ -1,7 +1,9 @@
-import Emergency from "../models/Emergency.js";
-import { getRequiredSkills } from "../services/emergencyService.js";
-import { startDispatch } from "../services/dispatchService.js";
-import { publishEmergencyStatusUpdate, publishJourneyStarted } from "../socket/emergencyPublisher.js";
+  import Emergency from "../models/Emergency.js";
+  import { getRequiredSkills } from "../services/emergencyService.js";
+  import { startDispatch } from "../services/dispatchService.js";
+  import { publishEmergencyStatusUpdate, publishJourneyStarted } from "../socket/emergencyPublisher.js";
+  import { findAStarRoute } from "../services/routing/aStarService.js";
+  import { getRoute } from "../services/routing/routeService.js";
 
 // @desc    Create new emergency
 // @route   POST /api/emergencies
@@ -394,10 +396,12 @@ export async function updateResponderStatus(req, res) {
 
     // When en_route, also broadcast the journey state for synchronized animation
     if (status === "en_route") {
+      const routeSource = req.body.routeSource || 'unknown';
       publishJourneyStarted(emergency._id.toString(), {
         emergencyId: emergency._id.toString(),
         routeCoordinates: emergency.routeCoordinates,
-        journeyStartedAt: emergency.journeyStartedAt.toISOString()
+        journeyStartedAt: emergency.journeyStartedAt.toISOString(),
+        routeSource
       });
     }
 
@@ -409,5 +413,252 @@ export async function updateResponderStatus(req, res) {
   } catch (error) {
     console.error("Error in updateResponderStatus:", error);
     return res.status(500).json({ error: "server_error" });
+  }
+}
+
+// ─── A* Routing: Responder → Incident ────────────────────────────────────────
+
+/**
+ * Computes the A* route from a responder's current location to the incident.
+ * Falls back to OSRM's getRoute if A* finds no path.
+ *
+ * @param {string} emergencyId
+ * @returns {Promise<{ path: Array<[number, number]>, distanceMeters: number, source: string } | null>}
+ */
+export async function getResponderToIncidentRoute(emergencyId) {
+  const tag = `[ROUTE]`;
+  try {
+    const emergency = await Emergency.findById(emergencyId)
+      .populate('assignedResponder', 'location');
+
+    if (!emergency || !emergency.assignedResponder || !emergency.assignedResponder.location) {
+      console.warn(`${tag} Responder-to-incident: emergency or responder location not found for ${emergencyId}`);
+      return null;
+    }
+
+    const responderLoc = emergency.assignedResponder.location;
+    const responderCoords = Array.isArray(responderLoc.coordinates)
+      ? responderLoc.coordinates
+      : responderLoc;
+    const incidentCoords = emergency.reporterLocation.coordinates;
+
+    console.log(`${tag} Computing responder-to-incident route for emergency ${emergencyId}`);
+    console.log(`${tag} Input coordinates: responder=[${responderCoords[0]},${responderCoords[1]}] incident=[${incidentCoords[0]},${incidentCoords[1]}]`);
+
+    // Try A* first
+    let aStarResult;
+    try {
+      aStarResult = findAStarRoute(responderCoords, incidentCoords);
+    } catch (astarErr) {
+      console.error(`${tag} A* algorithm threw an exception (bug in algorithm/graph):`, astarErr);
+      aStarResult = { found: false, reason: 'exception', startSnap: null, endSnap: null, path: [], distanceMeters: 0, iterations: 0 };
+    }
+
+    console.log(`${tag} A* algorithm result: path found=${aStarResult.found}, distance=${aStarResult.distanceMeters}m, waypoints=${aStarResult.path.length}, iterations=${aStarResult.iterations}`);
+    if (aStarResult.startSnap) console.log(`${tag} Snap details: start=nodeId=${aStarResult.startSnap.nodeId} (${aStarResult.startSnap.distanceMeters.toFixed(1)}m), end=nodeId=${aStarResult.endSnap.nodeId} (${aStarResult.endSnap.distanceMeters.toFixed(1)}m)`);
+
+    if (aStarResult.found && aStarResult.path.length >= 2) {
+      console.log(`${tag} Route source selected: A* (self-implemented shortest path algorithm)`);
+      return {
+        path: aStarResult.path,
+        distanceMeters: aStarResult.distanceMeters,
+        source: 'astar'
+      };
+    }
+
+    // A* failed -- log reason and fall back to OSRM
+    console.log(`${tag} A* returned no usable path (reason: ${aStarResult.reason || 'path too short'}). Falling back to OSRM external API...`);
+
+    // Fallback to OSRM
+    try {
+      const osrmRoute = await getRoute(responderCoords, incidentCoords);
+      console.log(`${tag} Route source selected: OSRM (external routing API fallback)`);
+      return {
+        path: osrmRoute.geometry,
+        distanceMeters: osrmRoute.distanceMeters,
+        source: 'osrm'
+      };
+    } catch (osrmErr) {
+      console.warn(`${tag} OSRM also failed (${osrmErr.message}). Using straight-line fallback.`);
+      return {
+        path: [responderCoords, incidentCoords],
+        distanceMeters: 0,
+        source: 'fallback'
+      };
+    }
+  } catch (error) {
+    console.error(`${tag} Unexpected error in responder-to-incident route:`, error);
+    return null;
+  }
+}
+
+// ─── Facility coordinates (demo area) ────────────────────────────────────────
+
+const DEMO_FACILITIES = {
+  medical: {
+    name: 'Patan Hospital',
+    coordinates: [85.3206, 27.6683]  // [lng, lat]
+  },
+  fire: {
+    name: 'Patan Hospital',
+    coordinates: [85.3206, 27.6683]
+  },
+  security: {
+    name: 'Metropolitan Police Station, Lagankhel',
+    coordinates: [85.3236, 27.6677]
+  },
+  crime: {
+    name: 'Metropolitan Police Station, Lagankhel',
+    coordinates: [85.3236, 27.6677]
+  },
+  natural_disaster: {
+    name: 'Metropolitan Police Station, Lagankhel',
+    coordinates: [85.3236, 27.6677]
+  }
+};
+
+/**
+ * Returns the recommended facility coordinates for a given emergency type.
+ *
+ * @param {string} type - Emergency type (medical, fire, security, etc.)
+ * @returns {{ name: string, coordinates: [number, number] }}
+ */
+export function getRecommendedFacility(type) {
+  return DEMO_FACILITIES[type] || DEMO_FACILITIES.medical;
+}
+
+// ─── A* Routing: Incident → Facility ─────────────────────────────────────────
+
+/**
+ * Computes the A* route from an incident to the recommended facility.
+ * Falls back to OSRM if A* finds no path.
+ *
+ * @param {string} emergencyId
+ * @param {string} [facilityType] - Override facility type; defaults to emergency.type.
+ * @returns {Promise<{ path: Array<[number, number]>, distanceMeters: number, source: string, facility: Object } | null>}
+ */
+export async function getIncidentToFacilityRoute(emergencyId, facilityType) {
+  const tag = `[ROUTE]`;
+  try {
+    const emergency = await Emergency.findById(emergencyId);
+
+    if (!emergency) {
+      console.warn(`${tag} Incident-to-facility: emergency not found for ${emergencyId}`);
+      return null;
+    }
+
+    const type = facilityType || emergency.type;
+    const facility = getRecommendedFacility(type);
+    const incidentCoords = emergency.reporterLocation.coordinates;
+
+    console.log(`${tag} Computing incident-to-facility route for emergency ${emergencyId}, type=${type}`);
+    console.log(`${tag} Selected facility: ${facility.name} at [${facility.coordinates[0]},${facility.coordinates[1]}]`);
+
+    // Try A* first
+    let aStarResult;
+    try {
+      aStarResult = findAStarRoute(incidentCoords, facility.coordinates);
+    } catch (astarErr) {
+      console.error(`${tag} A* algorithm threw an exception (bug in algorithm/graph):`, astarErr);
+      aStarResult = { found: false, reason: 'exception', startSnap: null, endSnap: null, path: [], distanceMeters: 0, iterations: 0 };
+    }
+
+    console.log(`${tag} A* algorithm result: path found=${aStarResult.found}, distance=${aStarResult.distanceMeters}m, waypoints=${aStarResult.path.length}, iterations=${aStarResult.iterations}`);
+    if (aStarResult.startSnap) console.log(`${tag} Snap details: start=nodeId=${aStarResult.startSnap.nodeId} (${aStarResult.startSnap.distanceMeters.toFixed(1)}m), end=nodeId=${aStarResult.endSnap.nodeId} (${aStarResult.endSnap.distanceMeters.toFixed(1)}m)`);
+
+    if (aStarResult.found && aStarResult.path.length >= 2) {
+      console.log(`${tag} Route source selected: A* (self-implemented shortest path algorithm) to ${facility.name}`);
+      return {
+        path: aStarResult.path,
+        distanceMeters: aStarResult.distanceMeters,
+        source: 'astar',
+        facility
+      };
+    }
+
+    // A* failed -- log reason and fall back to OSRM
+    console.log(`${tag} A* returned no usable path (reason: ${aStarResult.reason || 'path too short'}). Falling back to OSRM external API...`);
+
+    // Fallback to OSRM
+    try {
+      const osrmRoute = await getRoute(incidentCoords, facility.coordinates);
+      console.log(`${tag} Route source selected: OSRM (external routing API fallback) to ${facility.name}`);
+      return {
+        path: osrmRoute.geometry,
+        distanceMeters: osrmRoute.distanceMeters,
+        source: 'osrm',
+        facility
+      };
+    } catch (osrmErr) {
+      console.warn(`${tag} OSRM also failed (${osrmErr.message}). Using straight-line fallback.`);
+      return {
+        path: [incidentCoords, facility.coordinates],
+        distanceMeters: 0,
+        source: 'fallback',
+        facility
+      };
+    }
+  } catch (error) {
+    console.error(`${tag} Unexpected error in incident-to-facility route:`, error);
+    return null;
+  }
+}
+
+// ─── HTTP Handlers for A* Routes ─────────────────────────────────────────────
+
+/**
+ * @desc    Get A* route from responder to incident
+ * @route   GET /api/emergencies/:id/route/responder
+ * @access  Private
+ */
+export async function getResponderRouteHandler(req, res) {
+  try {
+    const route = await getResponderToIncidentRoute(req.params.id);
+
+    if (!route) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency or assigned responder not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      geometry: route.path,
+      distanceMeters: route.distanceMeters,
+      source: route.source
+    });
+  } catch (error) {
+    console.error(`[route][${req.params.id}] getResponderRouteHandler UNEXPECTED ERROR:`, error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+/**
+ * @desc    Get A* route from incident to recommended facility
+ * @route   GET /api/emergencies/:id/route/facility
+ * @access  Private
+ */
+export async function getFacilityRouteHandler(req, res) {
+  try {
+    const route = await getIncidentToFacilityRoute(req.params.id, req.query.facilityType);
+
+    if (!route) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      geometry: route.path,
+      distanceMeters: route.distanceMeters,
+      source: route.source,
+      facility: route.facility
+    });
+  } catch (error) {
+    console.error(`[route][${req.params.id}] getFacilityRouteHandler UNEXPECTED ERROR:`, error);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 }

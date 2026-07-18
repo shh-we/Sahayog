@@ -200,7 +200,7 @@ export async function updateLocation(req, res) {
           coordinates: [longitude, latitude]
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).select("-password");
 
     // Find active assignment and publish location to emergency room
